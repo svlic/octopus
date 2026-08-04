@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"errors"
 	"math/big"
 	"time"
 
@@ -10,19 +11,33 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateJWTToken(expiresMin int) (string, string, error) {
+var ErrInvalidJWTExpiry = errors.New("expiry must be -1, 0, or a representable positive number of seconds")
+
+func ValidateJWTExpiry(expiresSeconds int) error {
+	const maxExpirySeconds = int64(^uint64(0)>>1) / int64(time.Second)
+	if expiresSeconds < -1 || int64(expiresSeconds) > maxExpirySeconds {
+		return ErrInvalidJWTExpiry
+	}
+	return nil
+}
+
+func GenerateJWTToken(expiresSeconds int) (string, string, error) {
+	if err := ValidateJWTExpiry(expiresSeconds); err != nil {
+		return "", "", err
+	}
+
 	now := time.Now()
 	claims := &jwt.RegisteredClaims{
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
 		Issuer:    conf.APP_NAME,
 	}
-	if expiresMin == 0 {
-		claims.ExpiresAt = jwt.NewNumericDate(now.Add(time.Duration(15) * time.Minute))
-	} else if expiresMin > 0 {
-		claims.ExpiresAt = jwt.NewNumericDate(now.Add(time.Duration(expiresMin) * time.Minute))
-	} else if expiresMin == -1 {
-		claims.ExpiresAt = jwt.NewNumericDate(now.Add(time.Duration(30) * 24 * time.Hour))
+	if expiresSeconds == 0 {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(15 * time.Minute))
+	} else if expiresSeconds > 0 {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(time.Duration(expiresSeconds) * time.Second))
+	} else if expiresSeconds == -1 {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(30 * 24 * time.Hour))
 	}
 	user := op.UserGet()
 	secret := user.Username + user.Password

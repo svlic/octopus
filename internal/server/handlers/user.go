@@ -42,6 +42,10 @@ func login(c *gin.Context) {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
 		return
 	}
+	if err := auth.ValidateJWTExpiry(user.Expire); err != nil {
+		resp.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := op.UserVerify(user.Username, user.Password); err != nil {
 		resp.Error(c, http.StatusUnauthorized, resp.ErrUnauthorized)
 		return
