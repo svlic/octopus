@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 type SettingKey string
@@ -43,11 +44,24 @@ func DefaultSettings() []Setting {
 
 func (s *Setting) Validate() error {
 	switch s.Key {
-	case SettingKeyModelInfoUpdateInterval, SettingKeySyncLLMInterval, SettingKeyRelayLogKeepPeriod,
-		SettingKeyCircuitBreakerThreshold, SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown:
+	case SettingKeyStatsSaveInterval, SettingKeyModelInfoUpdateInterval, SettingKeySyncLLMInterval:
+		interval, err := strconv.Atoi(s.Value)
+		if err != nil || interval < 0 {
+			return fmt.Errorf("task interval must be a non-negative integer")
+		}
+		unit := time.Hour
+		if s.Key == SettingKeyStatsSaveInterval {
+			unit = time.Minute
+		}
+		if time.Duration(interval) > time.Duration(1<<63-1)/unit {
+			return fmt.Errorf("task interval is too large")
+		}
+		return nil
+	case SettingKeyRelayLogKeepPeriod, SettingKeyCircuitBreakerThreshold,
+		SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown:
 		_, err := strconv.Atoi(s.Value)
 		if err != nil {
-			return fmt.Errorf("model info update interval must be an integer")
+			return fmt.Errorf("setting value must be an integer")
 		}
 		return nil
 	case SettingKeyRelayLogKeepEnabled:

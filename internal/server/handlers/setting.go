@@ -62,21 +62,9 @@ func setSetting(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	switch setting.Key {
-	case model.SettingKeyModelInfoUpdateInterval:
-		hours, err := strconv.Atoi(setting.Value)
-		if err != nil {
-			resp.Error(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		task.Update(string(setting.Key), time.Duration(hours)*time.Hour)
-	case model.SettingKeySyncLLMInterval:
-		hours, err := strconv.Atoi(setting.Value)
-		if err != nil {
-			resp.Error(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		task.Update(string(setting.Key), time.Duration(hours)*time.Hour)
+	if err := updateTaskInterval(setting); err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
 	}
 	resp.Success(c, setting)
 }
@@ -133,15 +121,55 @@ func importDB(c *gin.Context) {
 		}
 	}
 
+	for i := range dump.Settings {
+		if err := dump.Settings[i].Validate(); err != nil {
+			resp.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
 	result, err := op.DBImportIncremental(c.Request.Context(), &dump)
 	if err != nil {
 		resp.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	_ = op.InitCache()
+	if err := op.InitCache(); err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for _, key := range []model.SettingKey{
+		model.SettingKeyModelInfoUpdateInterval,
+		model.SettingKeySyncLLMInterval,
+		model.SettingKeyStatsSaveInterval,
+	} {
+		value, err := op.SettingGetString(key)
+		if err != nil {
+			resp.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		setting := model.Setting{Key: key, Value: value}
+		if err := updateTaskInterval(setting); err != nil {
+			resp.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
 
 	resp.Success(c, result)
+}
+
+func updateTaskInterval(setting model.Setting) error {
+	interval, err := strconv.Atoi(setting.Value)
+	if err != nil {
+		return err
+	}
+	switch setting.Key {
+	case model.SettingKeyModelInfoUpdateInterval, model.SettingKeySyncLLMInterval:
+		task.Update(string(setting.Key), time.Duration(interval)*time.Hour)
+	case model.SettingKeyStatsSaveInterval:
+		task.Update(string(setting.Key), time.Duration(interval)*time.Minute)
+	}
+	return nil
 }
 
 func decodeDBDump(body []byte, dump *model.DBDump) error {
