@@ -21,8 +21,7 @@ var registeredRouters []*GroupRouter
 // NewGroupRouter creates a new GroupRouter with the given path and automatically registers it.
 func NewGroupRouter(path string) *GroupRouter {
 	router := &GroupRouter{
-		Path:   path,
-		Routes: make([]*Route, 0),
+		Path: path,
 	}
 	registeredRouters = append(registeredRouters, router)
 	return router
@@ -51,9 +50,8 @@ type Route struct {
 // NewRoute creates a new Route instance with the given path and method.
 func NewRoute(path string, method string) *Route {
 	return &Route{
-		Path:     path,
-		Method:   method,
-		Handlers: make([]gin.HandlerFunc, 0),
+		Path:   path,
+		Method: method,
 	}
 }
 
