@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/bestruirui/octopus/internal/conf"
 	"github.com/bestruirui/octopus/internal/db"
 	"github.com/bestruirui/octopus/internal/op"
@@ -21,34 +23,34 @@ var startCmd = &cobra.Command{
 		conf.Load(cfgFile)
 		log.SetLevel(conf.AppConfig.Log.Level)
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		shutdown.Init(log.Logger)
-		defer shutdown.Listen()
 		if err := db.InitDB(conf.AppConfig.Database.Type, conf.AppConfig.Database.Path, conf.IsDebug()); err != nil {
-			log.Errorf("database init error: %v", err)
-			return
+			return fmt.Errorf("initialize database: %w", err)
 		}
 		shutdown.Register(db.Close)
 
 		if err := op.InitCache(); err != nil {
-			log.Errorf("cache init error: %v", err)
-			return
+			shutdown.Shutdown()
+			return fmt.Errorf("initialize cache: %w", err)
 		}
 		shutdown.Register(op.SaveCache)
 
 		if err := op.UserInit(); err != nil {
-			log.Errorf("user init error: %v", err)
-			return
+			shutdown.Shutdown()
+			return fmt.Errorf("initialize user: %w", err)
 		}
 
 		if err := server.Start(); err != nil {
-			log.Errorf("server start error: %v", err)
-			return
+			shutdown.Shutdown()
+			return fmt.Errorf("start server: %w", err)
 		}
 		shutdown.Register(server.Close)
 
 		task.Init()
 		go task.RUN()
+		shutdown.Listen()
+		return nil
 	},
 }
 

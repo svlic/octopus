@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/bestruirui/octopus/internal/conf"
@@ -37,14 +38,21 @@ func Start() error {
 	r.Use(middleware.Cors())
 	r.Use(middleware.StaticEmbed("/", static.StaticFS))
 
-	registerRelayRoutes(r)
-	router.RegisterAll(r)
-
 	httpSrv.Addr = fmt.Sprintf("%s:%d", conf.AppConfig.Server.Host, conf.AppConfig.Server.Port)
+	listener, err := net.Listen("tcp", httpSrv.Addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", httpSrv.Addr, err)
+	}
+
+	registerRelayRoutes(r)
+	if err := router.RegisterAll(r); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("register routes: %w", err)
+	}
 	httpSrv.Handler = r
 	go func() {
-		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Errorf("http server listen and serve error: %v", err)
+		if err := httpSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Errorf("http server serve error: %v", err)
 		}
 	}()
 	return nil
