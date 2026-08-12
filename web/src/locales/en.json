@@ -136,6 +136,7 @@
             "sortByCost": "Cost",
             "sortByCount": "Count",
             "sortByTokens": "Tokens",
+            "sortByModel": "Model",
             "noData": "No ranking data",
             "successRate": "Success Rate"
         }

@@ -136,6 +136,7 @@
             "sortByCost": "金额",
             "sortByCount": "次数",
             "sortByTokens": "Tokens",
+            "sortByModel": "模型",
             "noData": "暂无排行数据",
             "successRate": "成功率"
         }
