@@ -83,6 +83,11 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 	op.StatsHourlyUpdate(globalStats)
 	op.StatsDailyUpdate(context.Background(), globalStats)
 	op.StatsAPIKeyUpdate(m.APIKeyID, globalStats)
+	op.StatsModelUpdate(model.StatsModel{
+		Name:         m.RequestModel,
+		ChannelID:    channelID,
+		StatsMetrics: globalStats,
+	})
 	if channelID > 0 {
 		// 通道成功/失败和等待时间在每次 attempt 结束时已记录；这里仅把最终响应的用量成本归到实际通道，避免重复计数。
 		op.StatsChannelUpdate(channelID, model.StatsMetrics{
