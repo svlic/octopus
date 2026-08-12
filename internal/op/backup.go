@@ -11,7 +11,10 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const dbDumpVersion = 1
+const (
+	dbDumpVersion     = 1
+	dbImportBatchSize = 100
+)
 
 func DBExportAll(ctx context.Context, includeLogs, includeStats bool) (*model.DBDump, error) {
 	conn := db.GetDB().WithContext(ctx)
@@ -178,7 +181,7 @@ func createDoNothing[T any](tx *gorm.DB, rows []T) (int64, error) {
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows)
+	result := tx.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(&rows, dbImportBatchSize)
 	return result.RowsAffected, result.Error
 }
 
@@ -189,7 +192,7 @@ func createUpsertStatsModels(tx *gorm.DB, rows []model.StatsModel) (int64, error
 	result := tx.Omit("id").Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "name"}, {Name: "channel_id"}},
 		UpdateAll: true,
-	}).Create(&rows)
+	}).CreateInBatches(&rows, dbImportBatchSize)
 	return result.RowsAffected, result.Error
 }
 
@@ -200,7 +203,7 @@ func createUpsertAll[T any](tx *gorm.DB, rows []T, columns []clause.Column) (int
 	result := tx.Clauses(clause.OnConflict{
 		Columns:   columns,
 		UpdateAll: true,
-	}).Create(&rows)
+	}).CreateInBatches(&rows, dbImportBatchSize)
 	return result.RowsAffected, result.Error
 }
 
@@ -211,6 +214,6 @@ func createUpsertSettings(tx *gorm.DB, rows []model.Setting) (int64, error) {
 	result := tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "key"}},
 		DoUpdates: clause.AssignmentColumns([]string{"value"}),
-	}).Create(&rows)
+	}).CreateInBatches(&rows, dbImportBatchSize)
 	return result.RowsAffected, result.Error
 }
