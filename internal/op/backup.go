@@ -141,7 +141,7 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 			} else {
 				res.RowsAffected["stats_hourly"] = n
 			}
-			if n, err := createUpsertAll(tx, dump.StatsModel, []clause.Column{{Name: "id"}}); err != nil {
+			if n, err := createUpsertStatsModels(tx, dump.StatsModel); err != nil {
 				return fmt.Errorf("import stats_model: %w", err)
 			} else {
 				res.RowsAffected["stats_model"] = n
@@ -179,6 +179,17 @@ func createDoNothing[T any](tx *gorm.DB, rows []T) (int64, error) {
 		return 0, nil
 	}
 	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows)
+	return result.RowsAffected, result.Error
+}
+
+func createUpsertStatsModels(tx *gorm.DB, rows []model.StatsModel) (int64, error) {
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	result := tx.Omit("id").Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}, {Name: "channel_id"}},
+		UpdateAll: true,
+	}).Create(&rows)
 	return result.RowsAffected, result.Error
 }
 
