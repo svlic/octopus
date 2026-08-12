@@ -1,5 +1,6 @@
+import { Github } from '@lobehub/icons';
 import { useTranslations } from 'use-intl';
-import { Info, Tag, Github, AlertTriangle, Download, Loader2 } from 'lucide-react';
+import { Info, Tag, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import { APP_VERSION, GITHUB_REPO } from '@/lib/info';
 import { useLatestInfo, useNowVersion, useUpdateCore } from '@/api/endpoints/update';
 import { Button } from '@/components/ui/button';
