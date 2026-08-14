@@ -90,6 +90,7 @@ Outbound Anthropic package path is intentionally misspelled: `internal/transform
 
 ## Conventions
 
+- **Push target**: the `dyna` branch pushes to `git@github.com:svlic/octopus.git` (a separate remote/fork), not `origin` (`github.com/bestruirui/octopus.git`). Add it once with `git remote add svlic git@github.com:svlic/octopus.git` if missing, then `git push svlic dyna`.
 - PRs: **one theme per PR** (`CONTRIBUTING.md`). AI assist OK; human review required before submit.
 - Prefer extending existing `op` + handler patterns over new top-level packages.
 - Transformer work: register in `inbound/register.go` or `outbound/register.go`; keep channel-type maps (`ChatChannelTypes` / `EmbeddingChannelTypes`) in sync.
