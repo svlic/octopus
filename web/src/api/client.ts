@@ -19,11 +19,8 @@ const handleError = (error: ApiError) => {
     console.error('API Error:', error);
 
     // 401 未授权，调用 store 的 logout
-    if (error.code === HttpStatus.UNAUTHORIZED) {
-        if (getAuthStore) {
-            const store = getAuthStore();
-            store.logout();
-        }
+    if (error.code === HttpStatus.UNAUTHORIZED && getAuthStore) {
+        getAuthStore().logout();
     }
 };
 
