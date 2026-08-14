@@ -13,6 +13,11 @@ import (
 
 const dbDumpVersion = 1
 
+// importCreateBatchSize caps multi-row INSERT binds under SQLite's
+// SQLITE_MAX_VARIABLE_NUMBER (modernc default ~32766). relay_logs is wide
+// (~17 binds/row); 50 rows stays well under the ceiling on every table.
+const importCreateBatchSize = 50
+
 func DBExportAll(ctx context.Context, includeLogs, includeStats bool) (*model.DBDump, error) {
 	conn := db.GetDB().WithContext(ctx)
 
@@ -141,7 +146,7 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 			} else {
 				res.RowsAffected["stats_hourly"] = n
 			}
-			if n, err := createUpsertAll(tx, dump.StatsModel, []clause.Column{{Name: "id"}}); err != nil {
+			if n, err := createUpsertAll(tx, dump.StatsModel, []clause.Column{{Name: "name"}}); err != nil {
 				return fmt.Errorf("import stats_model: %w", err)
 			} else {
 				res.RowsAffected["stats_model"] = n
@@ -175,31 +180,45 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 }
 
 func createDoNothing[T any](tx *gorm.DB, rows []T) (int64, error) {
-	if len(rows) == 0 {
-		return 0, nil
-	}
-	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows)
-	return result.RowsAffected, result.Error
+	return createBatched(tx, rows, func(tx *gorm.DB) *gorm.DB {
+		return tx.Clauses(clause.OnConflict{DoNothing: true})
+	})
 }
 
 func createUpsertAll[T any](tx *gorm.DB, rows []T, columns []clause.Column) (int64, error) {
-	if len(rows) == 0 {
-		return 0, nil
-	}
-	result := tx.Clauses(clause.OnConflict{
-		Columns:   columns,
-		UpdateAll: true,
-	}).Create(&rows)
-	return result.RowsAffected, result.Error
+	return createBatched(tx, rows, func(tx *gorm.DB) *gorm.DB {
+		return tx.Clauses(clause.OnConflict{
+			Columns:   columns,
+			UpdateAll: true,
+		})
+	})
 }
 
 func createUpsertSettings(tx *gorm.DB, rows []model.Setting) (int64, error) {
+	return createBatched(tx, rows, func(tx *gorm.DB) *gorm.DB {
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key"}},
+			DoUpdates: clause.AssignmentColumns([]string{"value"}),
+		})
+	})
+}
+
+func createBatched[T any](tx *gorm.DB, rows []T, prepare func(*gorm.DB) *gorm.DB) (int64, error) {
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	result := tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value"}),
-	}).Create(&rows)
-	return result.RowsAffected, result.Error
+	var total int64
+	for i := 0; i < len(rows); i += importCreateBatchSize {
+		end := i + importCreateBatchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		batch := rows[i:end]
+		result := prepare(tx).Create(&batch)
+		if result.Error != nil {
+			return total, result.Error
+		}
+		total += result.RowsAffected
+	}
+	return total, nil
 }

@@ -136,6 +136,8 @@
             "sortByCost": "Cost",
             "sortByCount": "Count",
             "sortByTokens": "Tokens",
+            "dimensionChannel": "Channel",
+            "dimensionModel": "Model",
             "noData": "No ranking data",
             "successRate": "Success Rate"
         }

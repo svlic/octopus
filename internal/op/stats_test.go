@@ -30,7 +30,7 @@ func assertStatsSaveRestoresDirtyIDs(t *testing.T, save func(context.Context) er
 	statsChannelCacheNeedUpdate = map[int]struct{}{11: {}}
 	statsChannelCacheNeedUpdateLock.Unlock()
 	statsModelCacheNeedUpdateLock.Lock()
-	statsModelCacheNeedUpdate = map[int]struct{}{22: {}}
+	statsModelCacheNeedUpdate = map[string]struct{}{"gpt-4o": {}}
 	statsModelCacheNeedUpdateLock.Unlock()
 	statsAPIKeyCacheNeedUpdateLock.Lock()
 	statsAPIKeyCacheNeedUpdate = map[int]struct{}{33: {}}
@@ -40,7 +40,7 @@ func assertStatsSaveRestoresDirtyIDs(t *testing.T, save func(context.Context) er
 		statsChannelCacheNeedUpdate = make(map[int]struct{})
 		statsChannelCacheNeedUpdateLock.Unlock()
 		statsModelCacheNeedUpdateLock.Lock()
-		statsModelCacheNeedUpdate = make(map[int]struct{})
+		statsModelCacheNeedUpdate = make(map[string]struct{})
 		statsModelCacheNeedUpdateLock.Unlock()
 		statsAPIKeyCacheNeedUpdateLock.Lock()
 		statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
@@ -61,7 +61,7 @@ func assertStatsSaveRestoresDirtyIDs(t *testing.T, save func(context.Context) er
 	_, channelDirty := statsChannelCacheNeedUpdate[11]
 	statsChannelCacheNeedUpdateLock.Unlock()
 	statsModelCacheNeedUpdateLock.Lock()
-	_, modelDirty := statsModelCacheNeedUpdate[22]
+	_, modelDirty := statsModelCacheNeedUpdate["gpt-4o"]
 	statsModelCacheNeedUpdateLock.Unlock()
 	statsAPIKeyCacheNeedUpdateLock.Lock()
 	_, apiKeyDirty := statsAPIKeyCacheNeedUpdate[33]

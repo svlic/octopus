@@ -28,8 +28,8 @@ var statsChannelCache = cache.New[int, model.StatsChannel](16)
 var statsChannelCacheNeedUpdate = make(map[int]struct{})
 var statsChannelCacheNeedUpdateLock sync.Mutex
 
-var statsModelCache = cache.New[int, model.StatsModel](16)
-var statsModelCacheNeedUpdate = make(map[int]struct{})
+var statsModelCache = cache.New[string, model.StatsModel](16)
+var statsModelCacheNeedUpdate = make(map[string]struct{})
 var statsModelCacheNeedUpdateLock sync.Mutex
 
 var statsAPIKeyCache = cache.New[int, model.StatsAPIKey](16)
@@ -75,11 +75,11 @@ func StatsSaveDB(ctx context.Context) error {
 	statsChannelCacheNeedUpdateLock.Unlock()
 
 	statsModelCacheNeedUpdateLock.Lock()
-	modelIDs := make([]int, 0, len(statsModelCacheNeedUpdate))
-	for id := range statsModelCacheNeedUpdate {
-		modelIDs = append(modelIDs, id)
+	modelNames := make([]string, 0, len(statsModelCacheNeedUpdate))
+	for name := range statsModelCacheNeedUpdate {
+		modelNames = append(modelNames, name)
 	}
-	statsModelCacheNeedUpdate = make(map[int]struct{})
+	statsModelCacheNeedUpdate = make(map[string]struct{})
 	statsModelCacheNeedUpdateLock.Unlock()
 
 	statsAPIKeyCacheNeedUpdateLock.Lock()
@@ -90,14 +90,14 @@ func StatsSaveDB(ctx context.Context) error {
 	statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 
-	if err := persistStatsSnapshots(ctx, totalSnap, dailySnap, hourlyAll, channelIDs, modelIDs, apiKeyIDs); err != nil {
-		restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs)
+	if err := persistStatsSnapshots(ctx, totalSnap, dailySnap, hourlyAll, channelIDs, modelNames, apiKeyIDs); err != nil {
+		restoreStatsDirty(channelIDs, modelNames, apiKeyIDs)
 		return err
 	}
 	return nil
 }
 
-func restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs []int) {
+func restoreStatsDirty(channelIDs []int, modelNames []string, apiKeyIDs []int) {
 	statsChannelCacheNeedUpdateLock.Lock()
 	for _, id := range channelIDs {
 		statsChannelCacheNeedUpdate[id] = struct{}{}
@@ -105,8 +105,8 @@ func restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs []int) {
 	statsChannelCacheNeedUpdateLock.Unlock()
 
 	statsModelCacheNeedUpdateLock.Lock()
-	for _, id := range modelIDs {
-		statsModelCacheNeedUpdate[id] = struct{}{}
+	for _, name := range modelNames {
+		statsModelCacheNeedUpdate[name] = struct{}{}
 	}
 	statsModelCacheNeedUpdateLock.Unlock()
 
@@ -123,7 +123,7 @@ func persistStatsSnapshots(
 	dailySnap model.StatsDaily,
 	hourlyAll [24]model.StatsHourly,
 	channelIDs []int,
-	modelIDs []int,
+	modelNames []string,
 	apiKeyIDs []int,
 ) error {
 	dbConn := db.GetDB().WithContext(ctx)
@@ -161,9 +161,29 @@ func persistStatsSnapshots(
 		}
 	}
 
-	for _, id := range modelIDs {
-		m, ok := statsModelCache.Get(id)
+	for _, name := range modelNames {
+		m, ok := statsModelCache.Get(name)
 		if !ok {
+			continue
+		}
+		if m.ID == 0 {
+			if result := dbConn.Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "name"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"input_token", "output_token", "input_cost", "output_cost",
+					"wait_time", "request_success", "request_failed",
+				}),
+			}).Create(&m); result.Error != nil {
+				return result.Error
+			}
+			if m.ID != 0 {
+				statsModelCache.Set(name, m)
+			} else {
+				var loaded model.StatsModel
+				if err := dbConn.Where("name = ?", name).First(&loaded).Error; err == nil {
+					statsModelCache.Set(name, loaded)
+				}
+			}
 			continue
 		}
 		if result := dbConn.Save(&m); result.Error != nil {
@@ -205,11 +225,11 @@ func statsSaveDBWithDailyOverride(ctx context.Context, dailyOverride model.Stats
 	statsChannelCacheNeedUpdateLock.Unlock()
 
 	statsModelCacheNeedUpdateLock.Lock()
-	modelIDs := make([]int, 0, len(statsModelCacheNeedUpdate))
-	for id := range statsModelCacheNeedUpdate {
-		modelIDs = append(modelIDs, id)
+	modelNames := make([]string, 0, len(statsModelCacheNeedUpdate))
+	for name := range statsModelCacheNeedUpdate {
+		modelNames = append(modelNames, name)
 	}
-	statsModelCacheNeedUpdate = make(map[int]struct{})
+	statsModelCacheNeedUpdate = make(map[string]struct{})
 	statsModelCacheNeedUpdateLock.Unlock()
 
 	statsAPIKeyCacheNeedUpdateLock.Lock()
@@ -220,8 +240,8 @@ func statsSaveDBWithDailyOverride(ctx context.Context, dailyOverride model.Stats
 	statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 
-	if err := persistStatsSnapshots(ctx, totalSnap, dailyOverride, hourlyAll, channelIDs, modelIDs, apiKeyIDs); err != nil {
-		restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs)
+	if err := persistStatsSnapshots(ctx, totalSnap, dailyOverride, hourlyAll, channelIDs, modelNames, apiKeyIDs); err != nil {
+		restoreStatsDirty(channelIDs, modelNames, apiKeyIDs)
 		return err
 	}
 	return nil
@@ -289,19 +309,32 @@ func StatsHourlyUpdate(metrics model.StatsMetrics) error {
 	return nil
 }
 
-func StatsModelUpdate(stats model.StatsModel) error {
-	modelCache, ok := statsModelCache.Get(stats.ID)
+func StatsModelUpdate(name string, metrics model.StatsMetrics) error {
+	if name == "" {
+		return nil
+	}
+	modelCache, ok := statsModelCache.Get(name)
 	if !ok {
 		modelCache = model.StatsModel{
-			ID: stats.ID,
+			Name: name,
 		}
+	} else if modelCache.Name == "" {
+		modelCache.Name = name
 	}
-	modelCache.StatsMetrics.Add(stats.StatsMetrics)
-	statsModelCache.Set(stats.ID, modelCache)
+	modelCache.StatsMetrics.Add(metrics)
+	statsModelCache.Set(name, modelCache)
 	statsModelCacheNeedUpdateLock.Lock()
-	statsModelCacheNeedUpdate[stats.ID] = struct{}{}
+	statsModelCacheNeedUpdate[name] = struct{}{}
 	statsModelCacheNeedUpdateLock.Unlock()
 	return nil
+}
+
+func StatsModelList() []model.StatsModel {
+	models := make([]model.StatsModel, 0, statsModelCache.Len())
+	for _, v := range statsModelCache.GetAll() {
+		models = append(models, v)
+	}
+	return models
 }
 
 func StatsAPIKeyUpdate(apiKeyID int, metrics model.StatsMetrics) error {
@@ -474,6 +507,23 @@ func statsRefreshCache(ctx context.Context) error {
 	statsChannelCacheNeedUpdateLock.Unlock()
 	for _, v := range loadedChannels {
 		statsChannelCache.Set(v.ChannelID, v)
+	}
+
+	var loadedModels []model.StatsModel
+	result = dbConn.Find(&loadedModels)
+	if result.Error != nil {
+		return fmt.Errorf("failed to get model stats: %v", result.Error)
+	}
+
+	statsModelCache.Clear()
+	statsModelCacheNeedUpdateLock.Lock()
+	statsModelCacheNeedUpdate = make(map[string]struct{})
+	statsModelCacheNeedUpdateLock.Unlock()
+	for _, v := range loadedModels {
+		if v.Name == "" {
+			continue
+		}
+		statsModelCache.Set(v.Name, v)
 	}
 
 	var loadedAPIKeys []model.StatsAPIKey

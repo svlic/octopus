@@ -136,6 +136,8 @@
             "sortByCost": "金額",
             "sortByCount": "次數",
             "sortByTokens": "Tokens",
+            "dimensionChannel": "渠道",
+            "dimensionModel": "模型",
             "noData": "暫無排行數據",
             "successRate": "成功率"
         }
