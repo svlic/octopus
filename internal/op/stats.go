@@ -90,7 +90,31 @@ func StatsSaveDB(ctx context.Context) error {
 	statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 
-	return persistStatsSnapshots(ctx, totalSnap, dailySnap, hourlyAll, channelIDs, modelIDs, apiKeyIDs)
+	if err := persistStatsSnapshots(ctx, totalSnap, dailySnap, hourlyAll, channelIDs, modelIDs, apiKeyIDs); err != nil {
+		restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs)
+		return err
+	}
+	return nil
+}
+
+func restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs []int) {
+	statsChannelCacheNeedUpdateLock.Lock()
+	for _, id := range channelIDs {
+		statsChannelCacheNeedUpdate[id] = struct{}{}
+	}
+	statsChannelCacheNeedUpdateLock.Unlock()
+
+	statsModelCacheNeedUpdateLock.Lock()
+	for _, id := range modelIDs {
+		statsModelCacheNeedUpdate[id] = struct{}{}
+	}
+	statsModelCacheNeedUpdateLock.Unlock()
+
+	statsAPIKeyCacheNeedUpdateLock.Lock()
+	for _, id := range apiKeyIDs {
+		statsAPIKeyCacheNeedUpdate[id] = struct{}{}
+	}
+	statsAPIKeyCacheNeedUpdateLock.Unlock()
 }
 
 func persistStatsSnapshots(
@@ -196,7 +220,11 @@ func statsSaveDBWithDailyOverride(ctx context.Context, dailyOverride model.Stats
 	statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 
-	return persistStatsSnapshots(ctx, totalSnap, dailyOverride, hourlyAll, channelIDs, modelIDs, apiKeyIDs)
+	if err := persistStatsSnapshots(ctx, totalSnap, dailyOverride, hourlyAll, channelIDs, modelIDs, apiKeyIDs); err != nil {
+		restoreStatsDirty(channelIDs, modelIDs, apiKeyIDs)
+		return err
+	}
+	return nil
 }
 
 func StatsDailyUpdate(ctx context.Context, metrics model.StatsMetrics) error {
