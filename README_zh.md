@@ -27,21 +27,138 @@
 
 ## 🚀 快速开始
 
-### 🐳 Docker 运行
+### 🐳 Docker 部署
 
-直接运行
+#### 使用官方预构建镜像
+
+直接运行：
 
 ```bash
 docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 bestrui/octopus
 ```
 
-或者使用 docker compose 运行
+或者使用 Docker Compose：
 
 ```bash
 wget https://raw.githubusercontent.com/bestruirui/octopus/refs/heads/dev/docker-compose.yml
 docker compose up -d
 ```
 
+> 上述方式使用 Docker Hub 上的 `bestrui/octopus` 预构建镜像，不会包含你在其他分支或本地源码中的修改。
+
+#### 使用当前分支源码通过 Docker Compose 部署
+
+以下流程会先构建当前检出分支的前端和 Go 二进制，再由 Docker Compose 构建本地镜像。以 `dyna` 分支和 Linux AMD64 服务器为例。
+
+**环境要求：**
+
+- Git
+- Go 1.24.4
+- Node.js 18+
+- pnpm
+- Docker 与 Docker Compose
+
+1. 克隆仓库并切换到需要部署的分支：
+
+```bash
+git clone -b dyna https://github.com/svlic/octopus.git
+cd octopus
+```
+
+如果已经克隆过上游仓库，先添加 fork 为单独的远程仓库：
+
+```bash
+git remote add svlic https://github.com/svlic/octopus.git
+git fetch svlic
+git switch dyna
+git pull --ff-only svlic dyna
+```
+
+如果 `svlic` 远程仓库已经存在，则不需要再次执行 `git remote add`。通过前面的 `git clone -b dyna ...` 命令首次克隆时，后续使用 `git pull --ff-only origin dyna` 更新。
+
+2. 构建需要嵌入 Go 二进制的前端静态文件：
+
+```bash
+cd web
+pnpm install --frozen-lockfile
+pnpm run build
+cd ..
+
+rm -rf static/out
+mv web/out static/out
+```
+
+3. 为服务器架构构建 Go 二进制：
+
+Linux AMD64（常见的 Intel/AMD 服务器）：
+
+```bash
+mkdir -p build/docker/linux/amd64
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
+```
+
+Linux ARM64：
+
+```bash
+mkdir -p build/docker/linux/arm64
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+  go build -tags=jsoniter -o build/docker/linux/arm64/octopus .
+```
+
+可以通过 `uname -m` 查看服务器架构：`x86_64` 对应 `linux/amd64`，`aarch64` 或 `arm64` 对应 `linux/arm64`。
+
+4. 在项目根目录新建或替换 `docker-compose.yml`。以下示例适用于 Linux AMD64；ARM64 服务器将 `linux/amd64` 改为 `linux/arm64`：
+
+```yaml
+services:
+  octopus:
+    build:
+      context: .
+      dockerfile: scripts/dockerfiles/Dockerfile.debian
+      args:
+        TARGETPLATFORM: linux/amd64
+    image: octopus:dyna
+    container_name: octopus
+    ports:
+      - "8080:8080"
+    volumes:
+      - "/path/to/data:/app/data"
+    restart: unless-stopped
+```
+
+请将 `/path/to/data` 替换为宿主机上实际的数据目录，然后启动：
+
+```bash
+docker compose up -d --build
+```
+
+查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f octopus
+```
+
+以后同步 `dyna` 分支的新代码并重新部署。使用 `git clone -b dyna ...` 克隆的仓库执行：
+
+```bash
+git pull --ff-only origin dyna
+
+cd web
+pnpm install --frozen-lockfile
+pnpm run build
+cd ..
+rm -rf static/out
+mv web/out static/out
+
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
+
+docker compose up -d --build
+```
+
+ARM64 服务器在更新命令中同样使用 `GOARCH=arm64` 和 `build/docker/linux/arm64/octopus`。`/app/data` 已挂载到宿主机，因此重新构建和创建容器不会删除已有配置与数据库；仍建议在升级前备份宿主机数据目录。
 
 ### 📦 从 Release 下载
 

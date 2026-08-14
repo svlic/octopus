@@ -27,7 +27,9 @@
 
 ## 🚀 Quick Start
 
-### 🐳 Docker
+### 🐳 Docker Deployment
+
+#### Use the Official Prebuilt Image
 
 Run directly:
 
@@ -35,13 +37,128 @@ Run directly:
 docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 bestrui/octopus
 ```
 
-Or use docker compose:
+Or use Docker Compose:
 
 ```bash
 wget https://raw.githubusercontent.com/bestruirui/octopus/refs/heads/dev/docker-compose.yml
 docker compose up -d
 ```
 
+> These commands use the prebuilt `bestrui/octopus` image from Docker Hub. They do not include changes made in another branch or in your local source tree.
+
+#### Deploy the Current Branch with Docker Compose
+
+The following procedure builds the frontend and Go binary from the currently checked-out branch, then lets Docker Compose build a local image. The example uses the `dyna` branch and a Linux AMD64 server.
+
+**Requirements:**
+
+- Git
+- Go 1.24.4
+- Node.js 18+
+- pnpm
+- Docker and Docker Compose
+
+1. Clone the repository and check out the branch to deploy:
+
+```bash
+git clone -b dyna https://github.com/svlic/octopus.git
+cd octopus
+```
+
+If you already cloned the upstream repository, add the fork as a separate remote first:
+
+```bash
+git remote add svlic https://github.com/svlic/octopus.git
+git fetch svlic
+git switch dyna
+git pull --ff-only svlic dyna
+```
+
+If the `svlic` remote already exists, do not run `git remote add` again. For a repository initially cloned with the preceding `git clone -b dyna ...` command, use `git pull --ff-only origin dyna` for subsequent updates.
+
+2. Build the frontend static files that will be embedded in the Go binary:
+
+```bash
+cd web
+pnpm install --frozen-lockfile
+pnpm run build
+cd ..
+
+rm -rf static/out
+mv web/out static/out
+```
+
+3. Build the Go binary for the server architecture:
+
+Linux AMD64 (most Intel/AMD servers):
+
+```bash
+mkdir -p build/docker/linux/amd64
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
+```
+
+Linux ARM64:
+
+```bash
+mkdir -p build/docker/linux/arm64
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+  go build -tags=jsoniter -o build/docker/linux/arm64/octopus .
+```
+
+Run `uname -m` to identify the server architecture: `x86_64` maps to `linux/amd64`; `aarch64` or `arm64` maps to `linux/arm64`.
+
+4. Create or replace `docker-compose.yml` in the project root. This example targets Linux AMD64; on ARM64, replace `linux/amd64` with `linux/arm64`:
+
+```yaml
+services:
+  octopus:
+    build:
+      context: .
+      dockerfile: scripts/dockerfiles/Dockerfile.debian
+      args:
+        TARGETPLATFORM: linux/amd64
+    image: octopus:dyna
+    container_name: octopus
+    ports:
+      - "8080:8080"
+    volumes:
+      - "/path/to/data:/app/data"
+    restart: unless-stopped
+```
+
+Replace `/path/to/data` with the actual host data directory, then start the service:
+
+```bash
+docker compose up -d --build
+```
+
+Check its status and logs:
+
+```bash
+docker compose ps
+docker compose logs -f octopus
+```
+
+To fetch later changes from `dyna` and redeploy a repository cloned with `git clone -b dyna ...`:
+
+```bash
+git pull --ff-only origin dyna
+
+cd web
+pnpm install --frozen-lockfile
+pnpm run build
+cd ..
+rm -rf static/out
+mv web/out static/out
+
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
+
+docker compose up -d --build
+```
+
+On ARM64, use `GOARCH=arm64` and `build/docker/linux/arm64/octopus` in the update command. Because `/app/data` is mounted from the host, rebuilding and recreating the container preserves the existing configuration and database. Back up the host data directory before upgrading nevertheless.
 
 ### 📦 Download from Release
 
