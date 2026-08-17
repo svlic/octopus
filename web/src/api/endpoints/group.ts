@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../client';
 import { logger } from '@/lib/logger';
 
+export const THINKING_LEVELS = ['', 'minimal', 'low', 'medium', 'high', 'max'] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
 /**
  * 分组项信息
  */
@@ -12,6 +15,7 @@ export interface GroupItem {
     model_name: string;
     priority: number;
     weight: number;
+    thinking_level: ThinkingLevel;
 }
 
 /**
@@ -45,15 +49,17 @@ export interface GroupItemAddRequest {
     model_name: string;
     priority: number;
     weight: number;
+    thinking_level: ThinkingLevel;
 }
 
 /**
- * 更新 item 请求 (仅 priority)
+ * 更新 item 请求
  */
 export interface GroupItemUpdateRequest {
     id: number;
-    priority: number;
-    weight: number;
+    priority?: number;
+    weight?: number;
+    thinking_level?: ThinkingLevel;
 }
 
 /**
