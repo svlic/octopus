@@ -228,6 +228,7 @@ function SortSection({
                     onRemove={onRemove}
                     onWeightChange={onWeightChange}
                     onThinkingLevelChange={onThinkingLevelChange}
+                    thinkingLevelEditable
                     removingIds={removingIds}
                     showWeight={showWeight}
                     showConfirmDelete={false}
@@ -294,7 +295,7 @@ export function GroupEditor({
         const key = memberKey(channel);
         setSelectedMembers((prev) => {
             if (prev.some((m) => m.id === key)) return prev;
-            return [...prev, { ...channel, id: key, weight: 1, thinking_level: '' }];
+            return [...prev, { ...channel, id: key, weight: 1, thinking_level: 'default' }];
         });
     }, []);
 
@@ -310,7 +311,7 @@ export function GroupEditor({
             const existing = new Set(prev.map((m) => m.id));
             const toAdd = matchedModelChannels
                 .filter((mc) => !existing.has(memberKey(mc)))
-                .map((mc) => ({ ...mc, id: memberKey(mc), weight: 1, thinking_level: '' as const }));
+                .map((mc) => ({ ...mc, id: memberKey(mc), weight: 1, thinking_level: 'default' }));
             return toAdd.length ? [...prev, ...toAdd] : prev;
         });
     }, [matchedModelChannels]);

@@ -44,6 +44,7 @@ function MemberItem({
     onRemove,
     onWeightChange,
     onThinkingLevelChange,
+    thinkingLevelEditable = false,
     isRemoving,
     index,
     showWeight = false,
@@ -54,7 +55,8 @@ function MemberItem({
     member: SelectedMember;
     onRemove: (id: string) => void;
     onWeightChange?: (id: string, weight: number) => void;
-    onThinkingLevelChange: (id: string, thinkingLevel: ThinkingLevel) => void;
+    onThinkingLevelChange?: (id: string, thinkingLevel: ThinkingLevel) => void;
+    thinkingLevelEditable?: boolean;
     isRemoving?: boolean;
     index: number;
     showWeight?: boolean;
@@ -125,10 +127,16 @@ function MemberItem({
                     <span className="text-[10px] text-muted-foreground truncate leading-tight">{member.channel_name}</span>
                 </div>
 
-                <ThinkingLevelSelect
-                    value={member.thinking_level}
-                    onChange={(thinkingLevel) => onThinkingLevelChange(member.id, thinkingLevel)}
-                />
+                {thinkingLevelEditable ? (
+                    <ThinkingLevelSelect
+                        value={member.thinking_level}
+                        onChange={(thinkingLevel) => onThinkingLevelChange?.(member.id, thinkingLevel)}
+                    />
+                ) : (
+                    <span className="max-w-16 shrink-0 truncate rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {member.thinking_level || 'default'}
+                    </span>
+                )}
 
                 {showWeight && (
                     <input
@@ -192,7 +200,8 @@ export interface MemberListProps {
     onReorder: (members: SelectedMember[]) => void;
     onRemove: (id: string) => void;
     onWeightChange?: (id: string, weight: number) => void;
-    onThinkingLevelChange: (id: string, thinkingLevel: ThinkingLevel) => void;
+    onThinkingLevelChange?: (id: string, thinkingLevel: ThinkingLevel) => void;
+    thinkingLevelEditable?: boolean;
     /**
      * When true, auto-scroll the list to bottom when a *new visible* member appears
      * (i.e. a new member id is added). Useful in "editor" flows. Defaults to true.
@@ -226,6 +235,7 @@ export function MemberList({
     onRemove,
     onWeightChange,
     onThinkingLevelChange,
+    thinkingLevelEditable = false,
     autoScrollOnAdd = true,
     onDragStart,
     onDrop,
@@ -333,6 +343,7 @@ export function MemberList({
                                                 onRemove={onRemove}
                                                 onWeightChange={onWeightChange}
                                                 onThinkingLevelChange={onThinkingLevelChange}
+                                                thinkingLevelEditable={thinkingLevelEditable}
                                                 isRemoving={removingIds.has(member.id)}
                                                 index={index}
                                                 showWeight={showWeight}

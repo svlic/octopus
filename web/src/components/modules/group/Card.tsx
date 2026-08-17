@@ -100,7 +100,7 @@ export function GroupCard({ group }: { group: Group }) {
                 channel_name: channelNameByKey.get(modelChannelKey(item.channel_id, item.model_name)) ?? `Channel ${item.channel_id}`,
                 item_id: item.id,
                 weight: item.weight,
-                thinking_level: item.thinking_level ?? '',
+                thinking_level: item.thinking_level || 'default',
             })),
         [group.items, channelNameByKey, enabledByKey]
     );
@@ -201,15 +201,6 @@ export function GroupCard({ group }: { group: Group }) {
         }));
     }, [scheduleItemUpdate]);
 
-    const handleThinkingLevelChange = useCallback((id: string, thinkingLevel: ThinkingLevel) => {
-        setMembers((prev) => prev.map((member) => {
-            if (member.id !== id) return member;
-            const updatedMember = { ...member, thinking_level: thinkingLevel };
-            scheduleItemUpdate(updatedMember);
-            return updatedMember;
-        }));
-    }, [scheduleItemUpdate]);
-
     const handleSubmitEdit = useCallback((values: GroupEditorValues, onDone?: () => void) => {
         if (!group.id) return;
 
@@ -222,7 +213,7 @@ export function GroupCard({ group }: { group: Group }) {
                 originalById.set(it.id, {
                     priority: it.priority,
                     weight: it.weight,
-                    thinkingLevel: it.thinking_level ?? '',
+                    thinkingLevel: it.thinking_level || 'default',
                 });
             }
         });
@@ -388,7 +379,6 @@ export function GroupCard({ group }: { group: Group }) {
                     onReorder={setMembers}
                     onRemove={handleRemoveMember}
                     onWeightChange={handleWeightChange}
-                    onThinkingLevelChange={handleThinkingLevelChange}
                     onDragStart={handleDragStart}
                     onDrop={handleDropReorder}
                     onDragFinish={handleDragFinish}
