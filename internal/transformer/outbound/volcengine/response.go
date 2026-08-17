@@ -38,13 +38,7 @@ func (o *ResponseOutbound) TransformRequest(ctx context.Context, request *model.
 		ResponsesRequest: openaiReq,
 		Input:            convertToResponsesInput(openaiReq.Input),
 	}
-	switch request.ReasoningEffort {
-	case "minimal":
-		responsesReq.Thinking.Type = ThinkingTypeDisabled
-	case "low", "medium", "high", "max":
-		responsesReq.Thinking.Type = ThinkingTypeEnabled
-	default:
-	}
+	responsesReq.Thinking.Type = thinkingTypeForReasoningEffort(request.ReasoningEffort)
 
 	body, err := json.Marshal(responsesReq)
 	if err != nil {
@@ -97,6 +91,17 @@ const (
 
 type Thinking struct {
 	Type ThinkingType `json:"type"`
+}
+
+func thinkingTypeForReasoningEffort(effort string) ThinkingType {
+	switch effort {
+	case "minimal":
+		return ThinkingTypeDisabled
+	case "low", "medium", "high", "xhigh", "max", "ultra":
+		return ThinkingTypeEnabled
+	default:
+		return ""
+	}
 }
 
 type ResponsesInput struct {
