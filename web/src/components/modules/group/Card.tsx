@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Trash2, X, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { type Group, useDeleteGroup, useUpdateGroup } from '@/api/endpoints/group';
+import { type Group, type ThinkingLevel, useDeleteGroup, useUpdateGroup } from '@/api/endpoints/group';
 import { useModelChannelList } from '@/api/endpoints/model';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
@@ -76,7 +76,8 @@ export function GroupCard({ group }: { group: Group }) {
 
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const weightTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const itemUpdateTimersRef = useRef(new Map<string, NodeJS.Timeout>());
+    const pendingItemUpdatesRef = useRef(new Map<string, SelectedMember>());
     const membersRef = useRef<SelectedMember[]>([]);
 
     const channelNameByKey = useMemo(() => buildChannelNameByModelKey(modelChannels), [modelChannels]);
@@ -99,6 +100,7 @@ export function GroupCard({ group }: { group: Group }) {
                 channel_name: channelNameByKey.get(modelChannelKey(item.channel_id, item.model_name)) ?? `Channel ${item.channel_id}`,
                 item_id: item.id,
                 weight: item.weight,
+                thinking_level: item.thinking_level ?? '',
             })),
         [group.items, channelNameByKey, enabledByKey]
     );
@@ -115,7 +117,8 @@ export function GroupCard({ group }: { group: Group }) {
     }, [members]);
 
     useEffect(() => {
-        return () => { if (weightTimerRef.current) clearTimeout(weightTimerRef.current); };
+        const timers = itemUpdateTimersRef.current;
+        return () => timers.forEach(clearTimeout);
     }, []);
 
     const onSuccess = useCallback(() => toast.success(t('toast.updated')), [t]);
@@ -148,7 +151,12 @@ export function GroupCard({ group }: { group: Group }) {
                 const origPriority = priorityByItemId.get(member.item_id);
                 return origPriority !== undefined && origPriority !== newPriority;
             })
-            .map(({ member, newPriority }) => ({ id: member.item_id!, priority: newPriority, weight: member.weight ?? 1 }));
+            .map(({ member, newPriority }) => ({
+                id: member.item_id!,
+                priority: newPriority,
+                weight: member.weight ?? 1,
+                thinking_level: member.thinking_level,
+            }));
         if (itemsToUpdate.length > 0) updateGroup.mutate({ id: group.id!, items_to_update: itemsToUpdate }, { onSuccess, onError });
     }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
 
@@ -157,31 +165,65 @@ export function GroupCard({ group }: { group: Group }) {
         if (member?.item_id !== undefined) updateGroup.mutate({ id: group.id!, items_to_delete: [member.item_id] }, { onSuccess, onError });
     }, [members, group.id, updateGroup, onSuccess, onError]);
 
-    const handleWeightChange = useCallback((id: string, weight: number) => {
-        setMembers((prev) => prev.map((m) => m.id === id ? { ...m, weight } : m));
-        if (weightTimerRef.current) clearTimeout(weightTimerRef.current);
-        weightTimerRef.current = setTimeout(() => {
-            const member = membersRef.current.find((m) => m.id === id);
-            if (!member?.item_id) return;
-            const priority = priorityByItemId.get(member.item_id);
+    const scheduleItemUpdate = useCallback((member: SelectedMember) => {
+        const id = member.id;
+        pendingItemUpdatesRef.current.set(id, member);
+        const currentTimer = itemUpdateTimersRef.current.get(id);
+        if (currentTimer) clearTimeout(currentTimer);
+        itemUpdateTimersRef.current.set(id, setTimeout(() => {
+            itemUpdateTimersRef.current.delete(id);
+            const pendingMember = pendingItemUpdatesRef.current.get(id);
+            pendingItemUpdatesRef.current.delete(id);
+            if (!pendingMember?.item_id) return;
+            const priority = priorityByItemId.get(pendingMember.item_id);
             if (!priority) return;
             updateGroup.mutate(
-                { id: group.id!, items_to_update: [{ id: member.item_id, priority, weight }] },
+                {
+                    id: group.id!,
+                    items_to_update: [{
+                        id: pendingMember.item_id,
+                        priority,
+                        weight: pendingMember.weight ?? 1,
+                        thinking_level: pendingMember.thinking_level,
+                    }],
+                },
                 { onSuccess, onError }
             );
-        }, 500);
+        }, 500));
     }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
+
+    const handleWeightChange = useCallback((id: string, weight: number) => {
+        setMembers((prev) => prev.map((member) => {
+            if (member.id !== id) return member;
+            const updatedMember = { ...member, weight };
+            scheduleItemUpdate(updatedMember);
+            return updatedMember;
+        }));
+    }, [scheduleItemUpdate]);
+
+    const handleThinkingLevelChange = useCallback((id: string, thinkingLevel: ThinkingLevel) => {
+        setMembers((prev) => prev.map((member) => {
+            if (member.id !== id) return member;
+            const updatedMember = { ...member, thinking_level: thinkingLevel };
+            scheduleItemUpdate(updatedMember);
+            return updatedMember;
+        }));
+    }, [scheduleItemUpdate]);
 
     const handleSubmitEdit = useCallback((values: GroupEditorValues, onDone?: () => void) => {
         if (!group.id) return;
 
         const originalItems = [...(group.items || [])].sort((a, b) => a.priority - b.priority);
-        const originalById = new Map<number, { priority: number; weight: number }>();
+        const originalById = new Map<number, { priority: number; weight: number; thinkingLevel: ThinkingLevel }>();
         const originalIds = new Set<number>();
         originalItems.forEach((it) => {
             if (typeof it.id === 'number') {
                 originalIds.add(it.id);
-                originalById.set(it.id, { priority: it.priority, weight: it.weight });
+                originalById.set(it.id, {
+                    priority: it.priority,
+                    weight: it.weight,
+                    thinkingLevel: it.thinking_level ?? '',
+                });
             }
         });
 
@@ -198,6 +240,7 @@ export function GroupCard({ group }: { group: Group }) {
                 model_name: m.name,
                 priority,
                 weight: m.weight ?? 1,
+                thinking_level: m.thinking_level,
             }));
 
         const items_to_update = values.members
@@ -208,10 +251,10 @@ export function GroupCard({ group }: { group: Group }) {
                 const orig = originalById.get(id);
                 const weight = m.weight ?? 1;
                 if (!orig) return null;
-                if (orig.priority === priority && orig.weight === weight) return null;
-                return { id, priority, weight };
+                if (orig.priority === priority && orig.weight === weight && orig.thinkingLevel === m.thinking_level) return null;
+                return { id, priority, weight, thinking_level: m.thinking_level };
             })
-            .filter((x): x is { id: number; priority: number; weight: number } => x !== null);
+            .filter((x): x is { id: number; priority: number; weight: number; thinking_level: ThinkingLevel } => x !== null);
 
         const payload: GroupUpdateRequest = { id: group.id };
         const nextName = values.name.trim();
@@ -345,6 +388,7 @@ export function GroupCard({ group }: { group: Group }) {
                     onReorder={setMembers}
                     onRemove={handleRemoveMember}
                     onWeightChange={handleWeightChange}
+                    onThinkingLevelChange={handleThinkingLevelChange}
                     onDragStart={handleDragStart}
                     onDrop={handleDropReorder}
                     onDragFinish={handleDragFinish}

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { getModelIcon } from '@/lib/model-icons';
-import type { GroupMode } from '@/api/endpoints/group';
+import type { GroupMode, ThinkingLevel } from '@/api/endpoints/group';
 import type { SelectedMember } from './ItemList';
 import { MemberList } from './ItemList';
 import { matchesGroupName, memberKey, normalizeKey, MODE_LABELS } from './utils';
@@ -177,6 +177,7 @@ function SortSection({
     onReorder,
     onRemove,
     onWeightChange,
+    onThinkingLevelChange,
     removingIds,
     showWeight,
     onClear,
@@ -185,6 +186,7 @@ function SortSection({
     onReorder: (members: SelectedMember[]) => void;
     onRemove: (id: string) => void;
     onWeightChange: (id: string, weight: number) => void;
+    onThinkingLevelChange: (id: string, thinkingLevel: ThinkingLevel) => void;
     removingIds: Set<string>;
     showWeight: boolean;
     onClear: () => void;
@@ -225,6 +227,7 @@ function SortSection({
                     onReorder={onReorder}
                     onRemove={onRemove}
                     onWeightChange={onWeightChange}
+                    onThinkingLevelChange={onThinkingLevelChange}
                     removingIds={removingIds}
                     showWeight={showWeight}
                     showConfirmDelete={false}
@@ -291,7 +294,7 @@ export function GroupEditor({
         const key = memberKey(channel);
         setSelectedMembers((prev) => {
             if (prev.some((m) => m.id === key)) return prev;
-            return [...prev, { ...channel, id: key, weight: 1 }];
+            return [...prev, { ...channel, id: key, weight: 1, thinking_level: '' }];
         });
     }, []);
 
@@ -307,13 +310,17 @@ export function GroupEditor({
             const existing = new Set(prev.map((m) => m.id));
             const toAdd = matchedModelChannels
                 .filter((mc) => !existing.has(memberKey(mc)))
-                .map((mc) => ({ ...mc, id: memberKey(mc), weight: 1 }));
+                .map((mc) => ({ ...mc, id: memberKey(mc), weight: 1, thinking_level: '' as const }));
             return toAdd.length ? [...prev, ...toAdd] : prev;
         });
     }, [matchedModelChannels]);
 
     const handleWeightChange = useCallback((id: string, weight: number) => {
         setSelectedMembers((prev) => prev.map((m) => m.id === id ? { ...m, weight } : m));
+    }, []);
+
+    const handleThinkingLevelChange = useCallback((id: string, thinkingLevel: ThinkingLevel) => {
+        setSelectedMembers((prev) => prev.map((m) => m.id === id ? { ...m, thinking_level: thinkingLevel } : m));
     }, []);
 
     const handleRemoveMember = useCallback((id: string) => {
@@ -475,6 +482,7 @@ export function GroupEditor({
                                 onReorder={setSelectedMembers}
                                 onRemove={handleRemoveMember}
                                 onWeightChange={handleWeightChange}
+                                onThinkingLevelChange={handleThinkingLevelChange}
                                 removingIds={removingIds}
                                 showWeight={mode === 4}
                                 onClear={handleClearMembers}

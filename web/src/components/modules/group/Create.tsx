@@ -45,6 +45,7 @@ export function CreateDialogContent() {
                             model_name: member.name,
                             priority: index + 1,
                             weight: member.weight ?? 1,
+                            thinking_level: member.thinking_level,
                         }));
 
                         createGroup.mutate(

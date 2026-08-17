@@ -15,11 +15,14 @@ import { getModelIcon } from '@/lib/model-icons';
 import type { LLMChannel } from '@/api/endpoints/model';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
 import { useTranslations } from 'next-intl';
+import type { ThinkingLevel } from '@/api/endpoints/group';
+import { ThinkingLevelSelect } from './ThinkingLevelSelect';
 
 export interface SelectedMember extends LLMChannel {
     id: string;
     item_id?: number;
     weight?: number;
+    thinking_level: ThinkingLevel;
 }
 
 function reorderList<T>(list: T[], startIndex: number, endIndex: number): T[] {
@@ -40,6 +43,7 @@ function MemberItem({
     member,
     onRemove,
     onWeightChange,
+    onThinkingLevelChange,
     isRemoving,
     index,
     showWeight = false,
@@ -50,6 +54,7 @@ function MemberItem({
     member: SelectedMember;
     onRemove: (id: string) => void;
     onWeightChange?: (id: string, weight: number) => void;
+    onThinkingLevelChange: (id: string, thinkingLevel: ThinkingLevel) => void;
     isRemoving?: boolean;
     index: number;
     showWeight?: boolean;
@@ -120,6 +125,11 @@ function MemberItem({
                     <span className="text-[10px] text-muted-foreground truncate leading-tight">{member.channel_name}</span>
                 </div>
 
+                <ThinkingLevelSelect
+                    value={member.thinking_level}
+                    onChange={(thinkingLevel) => onThinkingLevelChange(member.id, thinkingLevel)}
+                />
+
                 {showWeight && (
                     <input
                         type="number"
@@ -182,6 +192,7 @@ export interface MemberListProps {
     onReorder: (members: SelectedMember[]) => void;
     onRemove: (id: string) => void;
     onWeightChange?: (id: string, weight: number) => void;
+    onThinkingLevelChange: (id: string, thinkingLevel: ThinkingLevel) => void;
     /**
      * When true, auto-scroll the list to bottom when a *new visible* member appears
      * (i.e. a new member id is added). Useful in "editor" flows. Defaults to true.
@@ -214,6 +225,7 @@ export function MemberList({
     onReorder,
     onRemove,
     onWeightChange,
+    onThinkingLevelChange,
     autoScrollOnAdd = true,
     onDragStart,
     onDrop,
@@ -320,6 +332,7 @@ export function MemberList({
                                                 member={member}
                                                 onRemove={onRemove}
                                                 onWeightChange={onWeightChange}
+                                                onThinkingLevelChange={onThinkingLevelChange}
                                                 isRemoving={removingIds.has(member.id)}
                                                 index={index}
                                                 showWeight={showWeight}
