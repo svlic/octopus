@@ -42,6 +42,11 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 	}
 
 	requestModel := internalRequest.Model
+	requestReasoningState := reasoningState{
+		effort:           internalRequest.ReasoningEffort,
+		budget:           internalRequest.ReasoningBudget,
+		adaptiveThinking: internalRequest.AdaptiveThinking,
+	}
 	apiKeyID := c.GetInt("api_key_id")
 
 	// 获取通道分组
@@ -126,8 +131,8 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			continue
 		}
 
-		// 设置实际模型
 		internalRequest.Model = item.ModelName
+		applyThinkingLevelOverride(internalRequest, requestReasoningState, item.ThinkingLevel)
 
 		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t)",
 			requestModel, group.Mode, channel.Name, item.ModelName,
@@ -157,6 +162,29 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 	// 所有通道都失败
 	metrics.Save(c.Request.Context(), false, lastErr, iter.Attempts())
 	resp.Error(c, http.StatusBadGateway, "all channels failed")
+}
+
+type reasoningState struct {
+	effort           string
+	budget           *int64
+	adaptiveThinking bool
+}
+
+func applyThinkingLevelOverride(request *model.InternalLLMRequest, original reasoningState, override string) {
+	request.ReasoningEffort = resolveReasoningEffort(original.effort, override)
+	request.ReasoningBudget = original.budget
+	request.AdaptiveThinking = original.adaptiveThinking
+	if override != "" {
+		request.ReasoningBudget = nil
+		request.AdaptiveThinking = false
+	}
+}
+
+func resolveReasoningEffort(original, override string) string {
+	if override != "" {
+		return override
+	}
+	return original
 }
 
 // attempt 统一管理一次通道尝试的完整生命周期
