@@ -3,7 +3,6 @@
 
 /**
  * Cache naming
- * - Prefix MUST match `web/src/lib/sw.ts` (OCTOPUS_CACHE_PREFIX)
  * - Bump CACHE_VERSION when you change caching behavior in this file
  * - FONT cache is version-independent (fonts persist across updates)
  */
@@ -18,8 +17,6 @@ const CACHE_NAMES = {
 
 const SW_MESSAGE_TYPE = {
     SKIP_WAITING: 'SKIP_WAITING',
-    CLEAR_CACHE: 'CLEAR_CACHE',
-    CACHE_CLEARED: 'CACHE_CLEARED',
 };
 
 // Precache (PWA essentials)
@@ -170,18 +167,6 @@ self.addEventListener('message', (event) => {
     switch (type) {
         case SW_MESSAGE_TYPE.SKIP_WAITING:
             self.skipWaiting();
-            break;
-
-        case SW_MESSAGE_TYPE.CLEAR_CACHE:
-            // Only clear Octopus caches (avoid nuking other same-origin caches).
-            // PRESERVE font cache - fonts should persist across updates.
-            event.waitUntil(
-                (async () => {
-                    await deleteOctopusCaches({ keep: new Set([CACHE_NAMES.font]) });
-                    const clients = await self.clients.matchAll();
-                    clients.forEach((client) => client.postMessage({ type: SW_MESSAGE_TYPE.CACHE_CLEARED }));
-                })()
-            );
             break;
     }
 });
