@@ -41,7 +41,7 @@ func (o *ResponseOutbound) TransformRequest(ctx context.Context, request *model.
 	switch request.ReasoningEffort {
 	case "minimal":
 		responsesReq.Thinking.Type = ThinkingTypeDisabled
-	case "low", "medium", "high":
+	case "low", "medium", "high", "max":
 		responsesReq.Thinking.Type = ThinkingTypeEnabled
 	default:
 	}
