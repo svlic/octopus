@@ -390,6 +390,15 @@
             "failover": "故障轉移",
             "weighted": "加權分配"
         },
+        "thinkingLevel": {
+            "label": "思考等級",
+            "inherit": "繼承請求",
+            "minimal": "最少",
+            "low": "低",
+            "medium": "中",
+            "high": "高",
+            "max": "最高"
+        },
         "empty": "暫無分組，點擊左上角按鈕建立"
     },
     "model": {

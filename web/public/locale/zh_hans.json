@@ -390,6 +390,15 @@
             "failover": "故障转移",
             "weighted": "加权分配"
         },
+        "thinkingLevel": {
+            "label": "思考等级",
+            "inherit": "继承请求",
+            "minimal": "最少",
+            "low": "低",
+            "medium": "中",
+            "high": "高",
+            "max": "最高"
+        },
         "empty": "暂无分组，点击左上角按钮创建"
     },
     "model": {

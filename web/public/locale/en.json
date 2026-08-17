@@ -390,6 +390,15 @@
             "failover": "Failover",
             "weighted": "Weighted"
         },
+        "thinkingLevel": {
+            "label": "Thinking level",
+            "inherit": "Inherit",
+            "minimal": "Minimal",
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High",
+            "max": "Max"
+        },
         "empty": "No groups yet, click the button above to create one"
     },
     "model": {
