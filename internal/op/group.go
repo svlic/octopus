@@ -127,22 +127,46 @@ func GroupUpdate(req *model.GroupUpdateRequest, ctx context.Context) (*model.Gro
 		ids := make([]int, len(req.ItemsToUpdate))
 		priorityCase := "CASE id"
 		weightCase := "CASE id"
+		thinkingLevelCase := "CASE id"
+		priorityVars := make([]any, 0, len(req.ItemsToUpdate)*2)
+		weightVars := make([]any, 0, len(req.ItemsToUpdate)*2)
+		thinkingLevelVars := make([]any, 0, len(req.ItemsToUpdate)*2)
 		for i, item := range req.ItemsToUpdate {
 			ids[i] = item.ID
-			priorityCase += fmt.Sprintf(" WHEN %d THEN %d", item.ID, item.Priority)
-			weightCase += fmt.Sprintf(" WHEN %d THEN %d", item.ID, item.Weight)
+			if item.Priority != nil {
+				priorityCase += " WHEN ? THEN ?"
+				priorityVars = append(priorityVars, item.ID, *item.Priority)
+			}
+			if item.Weight != nil {
+				weightCase += " WHEN ? THEN ?"
+				weightVars = append(weightVars, item.ID, *item.Weight)
+			}
+			if item.ThinkingLevel != nil {
+				thinkingLevelCase += " WHEN ? THEN ?"
+				thinkingLevelVars = append(thinkingLevelVars, item.ID, *item.ThinkingLevel)
+			}
 		}
-		priorityCase += " END"
-		weightCase += " END"
+		itemUpdates := make(map[string]interface{}, 3)
+		if len(priorityVars) > 0 {
+			priorityCase += " ELSE priority END"
+			itemUpdates["priority"] = gorm.Expr(priorityCase, priorityVars...)
+		}
+		if len(weightVars) > 0 {
+			weightCase += " ELSE weight END"
+			itemUpdates["weight"] = gorm.Expr(weightCase, weightVars...)
+		}
+		if len(thinkingLevelVars) > 0 {
+			thinkingLevelCase += " ELSE thinking_level END"
+			itemUpdates["thinking_level"] = gorm.Expr(thinkingLevelCase, thinkingLevelVars...)
+		}
 
-		if err := tx.Model(&model.GroupItem{}).
-			Where("id IN ? AND group_id = ?", ids, req.ID).
-			Updates(map[string]interface{}{
-				"priority": gorm.Expr(priorityCase),
-				"weight":   gorm.Expr(weightCase),
-			}).Error; err != nil {
-			tx.Rollback()
-			return nil, fmt.Errorf("failed to update items: %w", err)
+		if len(itemUpdates) > 0 {
+			if err := tx.Model(&model.GroupItem{}).
+				Where("id IN ? AND group_id = ?", ids, req.ID).
+				Updates(itemUpdates).Error; err != nil {
+				tx.Rollback()
+				return nil, fmt.Errorf("failed to update items: %w", err)
+			}
 		}
 	}
 
@@ -151,11 +175,12 @@ func GroupUpdate(req *model.GroupUpdateRequest, ctx context.Context) (*model.Gro
 		newItems := make([]model.GroupItem, len(req.ItemsToAdd))
 		for i, item := range req.ItemsToAdd {
 			newItems[i] = model.GroupItem{
-				GroupID:   req.ID,
-				ChannelID: item.ChannelID,
-				ModelName: item.ModelName,
-				Priority:  item.Priority,
-				Weight:    item.Weight,
+				GroupID:       req.ID,
+				ChannelID:     item.ChannelID,
+				ModelName:     item.ModelName,
+				Priority:      item.Priority,
+				Weight:        item.Weight,
+				ThinkingLevel: item.ThinkingLevel,
 			}
 		}
 		if err := tx.Create(&newItems).Error; err != nil {
@@ -284,7 +309,7 @@ func GroupItemBatchAdd(groupID int, items []model.GroupIDAndLLMName, ctx context
 
 func GroupItemUpdate(item *model.GroupItem, ctx context.Context) error {
 	if err := db.GetDB().WithContext(ctx).Model(item).
-		Select("ModelName", "Priority", "Weight").
+		Select("ModelName", "Priority", "Weight", "ThinkingLevel").
 		Updates(item).Error; err != nil {
 		return err
 	}
