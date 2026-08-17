@@ -57,3 +57,22 @@ func TestResolveReasoningEffort_whenRetryInheritsClientValue(t *testing.T) {
 		t.Fatalf("retry reasoning effort = %q, want original %q", got, original)
 	}
 }
+
+func TestApplyThinkingLevelOverride_whenLevelIsDefault(t *testing.T) {
+	// Given
+	budget := int64(30000)
+	request := &model.InternalLLMRequest{}
+	original := reasoningState{
+		effort:           "medium",
+		budget:           &budget,
+		adaptiveThinking: true,
+	}
+
+	// When
+	applyThinkingLevelOverride(request, original, "default")
+
+	// Then
+	if request.ReasoningEffort != original.effort || request.ReasoningBudget != original.budget || request.AdaptiveThinking != original.adaptiveThinking {
+		t.Fatalf("request reasoning state = effort:%q budget:%v adaptive:%t", request.ReasoningEffort, request.ReasoningBudget, request.AdaptiveThinking)
+	}
+}

@@ -174,14 +174,14 @@ func applyThinkingLevelOverride(request *model.InternalLLMRequest, original reas
 	request.ReasoningEffort = resolveReasoningEffort(original.effort, override)
 	request.ReasoningBudget = original.budget
 	request.AdaptiveThinking = original.adaptiveThinking
-	if override != "" {
+	if override != "" && override != "default" {
 		request.ReasoningBudget = nil
 		request.AdaptiveThinking = false
 	}
 }
 
 func resolveReasoningEffort(original, override string) string {
-	if override != "" {
+	if override != "" && override != "default" {
 		return override
 	}
 	return original
