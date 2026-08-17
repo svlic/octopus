@@ -40,7 +40,6 @@ There is **no** Makefile, golangci-lint config, or pre-commit hook. CI (`.github
 - `static/out/*` is gitignored except `static/out/README.md`. A clean clone **cannot** `go build` / `go run` until you build the web app into `static/out`.
 - Next.js is **static export** (`web/next.config.ts`: `output: "export"`). Production `assetPrefix` is `./`.
 - Admin API base defaults to relative `"."` (`web/src/api/client.ts`). Only set `NEXT_PUBLIC_API_BASE_URL` for the separate Next dev server.
-- Release build also sets `NEXT_PUBLIC_APP_VERSION` from git tag (`scripts/build.sh`).
 
 ## Layout (where to edit)
 
@@ -64,7 +63,7 @@ There is **no** Makefile, golangci-lint config, or pre-commit hook. CI (`.github
 ### Request paths
 
 - **Public LLM API** (API key): `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/embeddings`, `/v1/images/*`, `/v1/models`
-- **Admin API** (JWT Bearer): `/api/v1/*` (user, channel, group, model, apikey, setting, stats, log, update)
+- **Admin API** (JWT Bearer): `/api/v1/*` (user, channel, group, model, apikey, setting, stats, log)
 - Flow: handler → `relay` → inbound transform → group balancer → outbound transform → upstream
 - **Group name** is the external `model` clients send (not the upstream model id alone)
 

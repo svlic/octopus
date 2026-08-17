@@ -285,7 +285,6 @@ http://localhost:3000
 | `OCTOPUS_DATABASE_TYPE` | `database.type` |
 | `OCTOPUS_DATABASE_PATH` | `database.path` |
 | `OCTOPUS_LOG_LEVEL` | `log.level` |
-| `OCTOPUS_GITHUB_PAT` | 用于获取最新版本时的速率限制(可选) |
 | `OCTOPUS_RELAY_MAX_SSE_EVENT_SIZE` | 最大 SSE 事件大小(可选) |
 | `OCTOPUS_IMAGES_BODY_MEMORY_THRESHOLD_MB` | Images 请求体内存缓存阈值，超过阈值会落盘临时文件(可选，默认 16) |
 | `OCTOPUS_IMAGES_BODY_MAX_MB` | Images 请求体最大大小限制，超过限制将拒绝请求(可选，默认 256) |

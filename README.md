@@ -285,7 +285,6 @@ All configuration options can be overridden via environment variables using the 
 | `OCTOPUS_DATABASE_TYPE` | `database.type` |
 | `OCTOPUS_DATABASE_PATH` | `database.path` |
 | `OCTOPUS_LOG_LEVEL` | `log.level` |
-| `OCTOPUS_GITHUB_PAT` | For rate limiting when getting the latest version (optional) |
 | `OCTOPUS_RELAY_MAX_SSE_EVENT_SIZE` | Maximum SSE event size (optional) |
 | `OCTOPUS_IMAGES_BODY_MEMORY_THRESHOLD_MB` | Images request body in-memory threshold. If exceeded, it will be spooled to a temporary file (optional, default 16) |
 | `OCTOPUS_IMAGES_BODY_MAX_MB` | Images request body maximum size. Requests above this limit are rejected (optional, default 256) |
