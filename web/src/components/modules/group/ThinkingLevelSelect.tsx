@@ -1,24 +1,16 @@
 'use client';
 
-import type { ThinkingLevel } from '@/api/endpoints/group';
+import { useEffect, useRef, useState } from 'react';
+import { THINKING_LEVELS, type ThinkingLevel } from '@/api/endpoints/group';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useTranslations } from 'next-intl';
 
-const INHERIT_VALUE = 'inherit';
+const CUSTOM_VALUE = 'custom';
+const CUSTOM_VALUE_PATTERN = /^[A-Za-z0-9._-]*$/;
 
-function parseThinkingLevel(value: string): ThinkingLevel {
-    switch (value) {
-        case INHERIT_VALUE:
-            return '';
-        case 'minimal':
-        case 'low':
-        case 'medium':
-        case 'high':
-        case 'max':
-            return value;
-        default:
-            return '';
-    }
+function isPreset(value: string): boolean {
+    return THINKING_LEVELS.some((level) => level === value);
 }
 
 export function ThinkingLevelSelect({
@@ -29,20 +21,77 @@ export function ThinkingLevelSelect({
     onChange: (value: ThinkingLevel) => void;
 }) {
     const t = useTranslations('group.thinkingLevel');
+    const normalizedValue = value || 'default';
+    const initialCustomActive = !isPreset(normalizedValue);
+    const [customDraft, setCustomDraft] = useState<ThinkingLevel | null>(initialCustomActive ? value : null);
+    const lastEmittedValue = useRef<ThinkingLevel>(value);
+
+    useEffect(() => {
+        if (value === lastEmittedValue.current) return;
+        const timer = window.setTimeout(() => {
+            lastEmittedValue.current = value;
+            setCustomDraft(isPreset(value || 'default') ? null : value);
+        });
+        return () => window.clearTimeout(timer);
+    }, [value]);
+
+    const emitChange = (next: ThinkingLevel) => {
+        lastEmittedValue.current = next;
+        onChange(next);
+    };
+    const customActive = customDraft !== null;
+    const customValue = customDraft ?? '';
+    const selectValue = customActive ? CUSTOM_VALUE : normalizedValue;
 
     return (
-        <Select value={value || INHERIT_VALUE} onValueChange={(next) => onChange(parseThinkingLevel(next))}>
-            <SelectTrigger size="sm" className="h-6 w-24 px-2 text-xs shadow-none" aria-label={t('label')}>
-                <SelectValue />
-            </SelectTrigger>
-            <SelectContent align="end">
-                <SelectItem value={INHERIT_VALUE}>{t('inherit')}</SelectItem>
-                <SelectItem value="minimal">{t('minimal')}</SelectItem>
-                <SelectItem value="low">{t('low')}</SelectItem>
-                <SelectItem value="medium">{t('medium')}</SelectItem>
-                <SelectItem value="high">{t('high')}</SelectItem>
-                <SelectItem value="max">{t('max')}</SelectItem>
-            </SelectContent>
-        </Select>
+        <div className="flex shrink-0 items-center gap-1.5">
+            <Select
+                value={selectValue}
+                onValueChange={(next) => {
+                    if (next === CUSTOM_VALUE) {
+                        setCustomDraft('');
+                        emitChange('');
+                        return;
+                    }
+                    setCustomDraft(null);
+                    emitChange(next);
+                }}
+            >
+                <SelectTrigger size="sm" className="h-7 w-24 px-2 font-mono text-xs shadow-none" aria-label={t('label')}>
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                    {THINKING_LEVELS.map((level) => (
+                        <SelectItem key={level} value={level}>{level}</SelectItem>
+                    ))}
+                    <SelectItem value={CUSTOM_VALUE}>{CUSTOM_VALUE}</SelectItem>
+                </SelectContent>
+            </Select>
+            {customActive && (
+                <Input
+                    value={customValue}
+                    onChange={(event) => {
+                        const next = event.target.value;
+                        if (CUSTOM_VALUE_PATTERN.test(next)) {
+                            setCustomDraft(next);
+                            emitChange(next);
+                        }
+                    }}
+                    onBlur={() => {
+                        if (!customValue) {
+                            setCustomDraft(null);
+                            emitChange('default');
+                        }
+                    }}
+                    maxLength={64}
+                    inputMode="text"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-label="custom thinking level"
+                    placeholder="custom"
+                    className="h-7 w-28 rounded-md px-2 font-mono text-xs shadow-none"
+                />
+            )}
+        </div>
     );
 }

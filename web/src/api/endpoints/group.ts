@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../client';
 import { logger } from '@/lib/logger';
 
-export const THINKING_LEVELS = ['', 'minimal', 'low', 'medium', 'high', 'max'] as const;
-export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+export const THINKING_LEVELS = ['default', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
+export type ThinkingLevel = string;
 
 /**
  * 分组项信息
