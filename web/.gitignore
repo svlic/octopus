@@ -15,6 +15,11 @@
 
 # production
 /build
+/out
+
+# legacy Next.js artifacts
+/.next
+/next-env.d.ts
 
 # misc
 .DS_Store
