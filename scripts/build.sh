@@ -233,24 +233,6 @@ build_frontend() {
     # Return to original directory
     cd ..
 
-    # Move out directory to static directory
-    log_info "Moving frontend output to static directory..."
-    
-    # Remove old static/out if exists
-    if [ -d "static/out" ]; then
-        rm -rf "static/out"
-        log_info "Removed old static/out directory"
-    fi
-    
-    # Move web/out to static/out
-    if [ -d "${web_dir}/out" ]; then
-        mv "${web_dir}/out" "static/"
-        log_success "Moved frontend output to static/out"
-    else
-        log_error "Frontend output directory not found: ${web_dir}/out"
-        return 1
-    fi
-
     return 0
 }
 

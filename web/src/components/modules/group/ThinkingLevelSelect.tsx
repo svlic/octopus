@@ -1,10 +1,8 @@
-'use client';
-
 import { useEffect, useRef, useState } from 'react';
-import { THINKING_LEVELS, type ThinkingLevel } from '@/api/endpoints/group';
+import { THINKING_LEVELS, type ThinkingLevel } from '@/api/group';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useTranslations } from 'next-intl';
+import { useTranslations } from 'use-intl';
 
 const CUSTOM_VALUE = 'custom';
 const CUSTOM_VALUE_PATTERN = /^[A-Za-z0-9._-]*$/;

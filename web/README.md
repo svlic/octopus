@@ -1,14 +1,24 @@
-# Octopus Admin UI
+# Octopus Web
 
-This directory contains the Next.js admin UI embedded in the Octopus Go binary for production releases.
+前端使用 React、TypeScript 和 Vite。
 
-Use pnpm for frontend development and builds:
+开发环境启动：
 
 ```bash
 pnpm install
-NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8080" pnpm run dev
+pnpm dev
 ```
 
-The development server runs at <http://localhost:3000>. Start the Go backend separately on port 8080.
+Vite 默认监听 `http://localhost:5173`，并将 `/api` 请求代理到 `http://127.0.0.1:8080`。如需连接其他后端地址，可在启动时设置 `VITE_PROXY_TARGET`：
 
-For production builds, deployment, and complete project setup, see the [repository README](../README.md).
+```bash
+VITE_PROXY_TARGET="http://127.0.0.1:8080" pnpm dev
+```
+
+生产构建：
+
+```bash
+pnpm build
+```
+
+构建产物直接输出到 `static/out`，供 Go 二进制文件嵌入。

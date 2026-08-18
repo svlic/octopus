@@ -1,12 +1,10 @@
-'use client';
-
 import { useEffect, useState, useRef } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations } from 'use-intl';
 import { RefreshCw, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useSettingList, useSetSetting, SettingKey } from '@/api/endpoints/setting';
-import { useLastSyncTime, useSyncChannel } from '@/api/endpoints/channel';
+import { useSettingList, useSetSetting, SettingKey } from '@/api/setting';
+import { useLastSyncTime, useSyncChannel } from '@/api/channel';
 import { toast } from '@/components/common/Toast';
 
 export function SettingLLMSync() {
@@ -105,4 +103,3 @@ export function SettingLLMSync() {
         </div>
     );
 }
-

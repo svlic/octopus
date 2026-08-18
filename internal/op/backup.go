@@ -11,28 +11,22 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const dbDumpVersion = 1
+const (
+	dbDumpVersion         = 2
+	importCreateBatchSize = 50
+)
 
-// importCreateBatchSize caps multi-row INSERT binds under SQLite's
-// SQLITE_MAX_VARIABLE_NUMBER (modernc default ~32766). relay_logs is wide
-// (~17 binds/row); 50 rows stays well under the ceiling on every table.
-const importCreateBatchSize = 50
-
-func DBExportAll(ctx context.Context, includeLogs, includeStats bool) (*model.DBDump, error) {
+func DBExportAll(ctx context.Context, includeStats bool) (*model.DBDump, error) {
 	conn := db.GetDB().WithContext(ctx)
 
 	d := &model.DBDump{
 		Version:      dbDumpVersion,
 		ExportedAt:   time.Now().UTC(),
-		IncludeLogs:  includeLogs,
 		IncludeStats: includeStats,
 	}
 
 	if err := conn.Find(&d.Channels).Error; err != nil {
 		return nil, fmt.Errorf("export channels: %w", err)
-	}
-	if err := conn.Find(&d.ChannelKeys).Error; err != nil {
-		return nil, fmt.Errorf("export channel_keys: %w", err)
 	}
 	if err := conn.Find(&d.Groups).Error; err != nil {
 		return nil, fmt.Errorf("export groups: %w", err)
@@ -71,12 +65,6 @@ func DBExportAll(ctx context.Context, includeLogs, includeStats bool) (*model.DB
 		}
 	}
 
-	if includeLogs {
-		if err := conn.Find(&d.RelayLogs).Error; err != nil {
-			return nil, fmt.Errorf("export relay_logs: %w", err)
-		}
-	}
-
 	return d, nil
 }
 
@@ -98,11 +86,6 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 			return fmt.Errorf("import channels: %w", err)
 		} else {
 			res.RowsAffected["channels"] = n
-		}
-		if n, err := createDoNothing(tx, dump.ChannelKeys); err != nil {
-			return fmt.Errorf("import channel_keys: %w", err)
-		} else {
-			res.RowsAffected["channel_keys"] = n
 		}
 		if n, err := createDoNothing(tx, dump.Groups); err != nil {
 			return fmt.Errorf("import groups: %w", err)
@@ -160,14 +143,6 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 				return fmt.Errorf("import stats_api_key: %w", err)
 			} else {
 				res.RowsAffected["stats_api_key"] = n
-			}
-		}
-
-		if dump.IncludeLogs {
-			if n, err := createDoNothing(tx, dump.RelayLogs); err != nil {
-				return fmt.Errorf("import relay_logs: %w", err)
-			} else {
-				res.RowsAffected["relay_logs"] = n
 			}
 		}
 

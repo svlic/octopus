@@ -1,20 +1,16 @@
-'use client';
-
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Trash2, X, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { type Group, type ThinkingLevel, useDeleteGroup, useUpdateGroup } from '@/api/endpoints/group';
-import { useModelChannelList } from '@/api/endpoints/model';
-import { useTranslations } from 'next-intl';
-import { cn } from '@/lib/utils';
+import { type Group, type GroupUpdateRequest, type ThinkingLevel, useDeleteGroup, useUpdateGroup, useUpdateGroupActiveItem } from '@/api/group';
+import { useModelChannelList } from '@/api/model';
+import { useTranslations } from 'use-intl';
 import { toast } from '@/components/common/Toast';
 import { CopyIconButton } from '@/components/common/CopyButton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SelectedMember } from './ItemList';
 import { MemberList } from './ItemList';
 import { GroupEditor, type GroupEditorValues } from './Editor';
-import { buildChannelNameByModelKey, modelChannelKey, MODE_LABELS } from './utils';
-import { GroupMode, type GroupUpdateRequest } from '@/api/endpoints/group';
+import { buildChannelNameByModelKey, modelChannelKey } from './utils';
 import {
     MorphingDialog,
     MorphingDialogClose,
@@ -51,10 +47,7 @@ function EditDialogContent({ group, displayMembers, isSubmitting, onSubmit }: Ed
                     key={`edit-group-${group.id}`}
                     initial={{
                         name: group.name,
-                        match_regex: group.match_regex ?? '',
-                        mode: group.mode,
-                        first_token_time_out: group.first_token_time_out ?? 0,
-                        session_keep_time: group.session_keep_time ?? 0,
+                        retry_interval: group.retry_interval,
                         members: displayMembers,
                     }}
                     submitText={t('detail.actions.save')}
@@ -71,14 +64,11 @@ function EditDialogContent({ group, displayMembers, isSubmitting, onSubmit }: Ed
 export function GroupCard({ group }: { group: Group }) {
     const t = useTranslations('group');
     const updateGroup = useUpdateGroup();
+    const updateActiveItem = useUpdateGroupActiveItem();
     const deleteGroup = useDeleteGroup();
     const { data: modelChannels = [] } = useModelChannelList();
 
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [isDragging, setIsDragging] = useState(false);
-    const itemUpdateTimersRef = useRef(new Map<string, NodeJS.Timeout>());
-    const pendingItemUpdatesRef = useRef(new Map<string, SelectedMember>());
-    const membersRef = useRef<SelectedMember[]>([]);
 
     const channelNameByKey = useMemo(() => buildChannelNameByModelKey(modelChannels), [modelChannels]);
     const enabledByKey = useMemo(() => {
@@ -99,38 +89,15 @@ export function GroupCard({ group }: { group: Group }) {
                 channel_id: item.channel_id,
                 channel_name: channelNameByKey.get(modelChannelKey(item.channel_id, item.model_name)) ?? `Channel ${item.channel_id}`,
                 item_id: item.id,
-                weight: item.weight,
                 thinking_level: item.thinking_level || 'default',
             })),
         [group.items, channelNameByKey, enabledByKey]
     );
-    const [members, setMembers] = useState(displayMembers);
-    const [previousDisplayMembers, setPreviousDisplayMembers] = useState(displayMembers);
-
-    if (!isDragging && displayMembers !== previousDisplayMembers) {
-        setPreviousDisplayMembers(displayMembers);
-        setMembers([...displayMembers]);
-    }
-
-    useEffect(() => {
-        membersRef.current = members;
-    }, [members]);
-
-    useEffect(() => {
-        const timers = itemUpdateTimersRef.current;
-        return () => timers.forEach(clearTimeout);
-    }, []);
+    const [draggedMembers, setDraggedMembers] = useState<SelectedMember[] | null>(null);
+    const members = draggedMembers ?? displayMembers;
 
     const onSuccess = useCallback(() => toast.success(t('toast.updated')), [t]);
     const onError = useCallback((error: Error) => toast.error(t('toast.updateFailed'), { description: error.message }), [t]);
-
-    // Avoid UI flicker: drag-reorder also uses the same mutation, so only "mode switch" should lock mode buttons.
-    const isUpdatingMode = (() => {
-        if (!updateGroup.isPending) return false;
-        const v = updateGroup.variables;
-        if (typeof v !== 'object' || v === null) return false;
-        return 'mode' in v && typeof (v as { mode?: unknown }).mode === 'number';
-    })();
 
     const priorityByItemId = useMemo(() => {
         const map = new Map<number, number>();
@@ -140,8 +107,8 @@ export function GroupCard({ group }: { group: Group }) {
         return map;
     }, [group.items]);
 
-    const handleDragStart = useCallback(() => setIsDragging(true), []);
-    const handleDragFinish = useCallback(() => setIsDragging(false), []);
+    const handleDragStart = useCallback(() => setDraggedMembers(displayMembers), [displayMembers]);
+    const handleDragFinish = useCallback(() => setDraggedMembers(null), []);
 
     const handleDropReorder = useCallback((nextMembers: SelectedMember[]) => {
         const itemsToUpdate = nextMembers
@@ -151,12 +118,7 @@ export function GroupCard({ group }: { group: Group }) {
                 const origPriority = priorityByItemId.get(member.item_id);
                 return origPriority !== undefined && origPriority !== newPriority;
             })
-            .map(({ member, newPriority }) => ({
-                id: member.item_id!,
-                priority: newPriority,
-                weight: member.weight ?? 1,
-                thinking_level: member.thinking_level,
-            }));
+            .map(({ member, newPriority }) => ({ id: member.item_id!, priority: newPriority }));
         if (itemsToUpdate.length > 0) updateGroup.mutate({ id: group.id!, items_to_update: itemsToUpdate }, { onSuccess, onError });
     }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
 
@@ -165,54 +127,31 @@ export function GroupCard({ group }: { group: Group }) {
         if (member?.item_id !== undefined) updateGroup.mutate({ id: group.id!, items_to_delete: [member.item_id] }, { onSuccess, onError });
     }, [members, group.id, updateGroup, onSuccess, onError]);
 
-    const scheduleItemUpdate = useCallback((member: SelectedMember) => {
-        const id = member.id;
-        pendingItemUpdatesRef.current.set(id, member);
-        const currentTimer = itemUpdateTimersRef.current.get(id);
-        if (currentTimer) clearTimeout(currentTimer);
-        itemUpdateTimersRef.current.set(id, setTimeout(() => {
-            itemUpdateTimersRef.current.delete(id);
-            const pendingMember = pendingItemUpdatesRef.current.get(id);
-            pendingItemUpdatesRef.current.delete(id);
-            if (!pendingMember?.item_id) return;
-            const priority = priorityByItemId.get(pendingMember.item_id);
-            if (!priority) return;
-            updateGroup.mutate(
-                {
-                    id: group.id!,
-                    items_to_update: [{
-                        id: pendingMember.item_id,
-                        priority,
-                        weight: pendingMember.weight ?? 1,
-                        thinking_level: pendingMember.thinking_level,
-                    }],
-                },
-                { onSuccess, onError }
-            );
-        }, 500));
-    }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
+    const handleActivate = useCallback((itemId: number) => {
+        if (!group.id || itemId === group.active_item_id || updateActiveItem.isPending) return;
+        updateActiveItem.mutate({ groupId: group.id, itemId }, { onSuccess, onError });
+    }, [group.active_item_id, group.id, onError, onSuccess, updateActiveItem]);
 
-    const handleWeightChange = useCallback((id: string, weight: number) => {
-        setMembers((prev) => prev.map((member) => {
-            if (member.id !== id) return member;
-            const updatedMember = { ...member, weight };
-            scheduleItemUpdate(updatedMember);
-            return updatedMember;
-        }));
-    }, [scheduleItemUpdate]);
+    const handleThinkingLevelChange = useCallback((id: string, value: ThinkingLevel) => {
+        const member = members.find((candidate) => candidate.id === id);
+        if (member?.item_id === undefined || member.thinking_level === value) return;
+        updateGroup.mutate(
+            { id: group.id!, items_to_update: [{ id: member.item_id, thinking_level: value }] },
+            { onSuccess, onError }
+        );
+    }, [group.id, members, onError, onSuccess, updateGroup]);
 
     const handleSubmitEdit = useCallback((values: GroupEditorValues, onDone?: () => void) => {
         if (!group.id) return;
 
         const originalItems = [...(group.items || [])].sort((a, b) => a.priority - b.priority);
-        const originalById = new Map<number, { priority: number; weight: number; thinkingLevel: ThinkingLevel }>();
+        const originalById = new Map<number, { priority: number; thinkingLevel: ThinkingLevel }>();
         const originalIds = new Set<number>();
         originalItems.forEach((it) => {
             if (typeof it.id === 'number') {
                 originalIds.add(it.id);
                 originalById.set(it.id, {
                     priority: it.priority,
-                    weight: it.weight,
                     thinkingLevel: it.thinking_level || 'default',
                 });
             }
@@ -230,7 +169,6 @@ export function GroupCard({ group }: { group: Group }) {
                 channel_id: m.channel_id,
                 model_name: m.name,
                 priority,
-                weight: m.weight ?? 1,
                 thinking_level: m.thinking_level,
             }));
 
@@ -239,25 +177,20 @@ export function GroupCard({ group }: { group: Group }) {
             .filter(({ m }) => typeof m.item_id === 'number')
             .map(({ m, priority }) => {
                 const id = m.item_id!;
-                const orig = originalById.get(id);
-                const weight = m.weight ?? 1;
-                if (!orig) return null;
-                if (orig.priority === priority && orig.weight === weight && orig.thinkingLevel === m.thinking_level) return null;
-                return { id, priority, weight, thinking_level: m.thinking_level };
+                const original = originalById.get(id);
+                if (!original) return null;
+                const update: { id: number; priority?: number; thinking_level?: ThinkingLevel } = { id };
+                if (original.priority !== priority) update.priority = priority;
+                if (original.thinkingLevel !== m.thinking_level) update.thinking_level = m.thinking_level;
+                return Object.keys(update).length > 1 ? update : null;
             })
-            .filter((x): x is { id: number; priority: number; weight: number; thinking_level: ThinkingLevel } => x !== null);
+            .filter((item): item is { id: number; priority?: number; thinking_level?: ThinkingLevel } => item !== null);
 
         const payload: GroupUpdateRequest = { id: group.id };
         const nextName = values.name.trim();
-        const nextRegex = (values.match_regex ?? '').trim();
-        const nextFirstTokenTimeOut = values.first_token_time_out ?? 0;
-        const nextSessionKeepTime = values.session_keep_time ?? 0;
 
         if (nextName && nextName !== group.name) payload.name = nextName;
-        if (values.mode !== group.mode) payload.mode = values.mode;
-        if (nextRegex !== (group.match_regex ?? '')) payload.match_regex = nextRegex;
-        if (nextFirstTokenTimeOut !== (group.first_token_time_out ?? 0)) payload.first_token_time_out = nextFirstTokenTimeOut;
-        if (nextSessionKeepTime !== (group.session_keep_time ?? 0)) payload.session_keep_time = nextSessionKeepTime;
+        if (values.retry_interval !== group.retry_interval) payload.retry_interval = values.retry_interval;
         if (items_to_add.length) payload.items_to_add = items_to_add;
         if (items_to_update.length) payload.items_to_update = items_to_update;
         if (items_to_delete.length) payload.items_to_delete = items_to_delete;
@@ -274,28 +207,32 @@ export function GroupCard({ group }: { group: Group }) {
             },
             onError,
         });
-    }, [group.first_token_time_out, group.session_keep_time, group.id, group.items, group.match_regex, group.mode, group.name, onSuccess, onError, updateGroup]);
+    }, [group.id, group.items, group.name, group.retry_interval, onSuccess, onError, updateGroup]);
 
     return (
-        <article className="flex flex-col rounded-3xl border border-border bg-card text-card-foreground p-4 custom-shadow">
+    <article className="flex flex-col rounded-3xl border border-border bg-card text-card-foreground p-4">
             <header className="flex items-start justify-between mb-3 relative overflow-visible rounded-xl -mx-1 px-1 -my-1 py-1">
                 <div className="relative flex-1 mr-2 min-w-0 group/title">
-                    <Tooltip side="top" sideOffset={10} align="center">
+                    <Tooltip>
                         <TooltipTrigger asChild>
                             <h3 className="text-lg font-bold truncate">{group.name}</h3>
                         </TooltipTrigger>
-                        <TooltipContent key={group.name}>{group.name}</TooltipContent>
+                        <TooltipContent key={group.name} side="top" sideOffset={10} align="center">
+                            {group.name}
+                        </TooltipContent>
                     </Tooltip>
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
                     <MorphingDialog>
                         <MorphingDialogTrigger className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Tooltip side="top" sideOffset={10} align="center">
+                            <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Pencil className="size-4" />
                                 </TooltipTrigger>
-                                <TooltipContent>{t('detail.actions.edit')}</TooltipContent>
+                                <TooltipContent side="top" sideOffset={10} align="center">
+                                    {t('detail.actions.edit')}
+                                </TooltipContent>
                             </Tooltip>
                         </MorphingDialogTrigger>
 
@@ -311,25 +248,31 @@ export function GroupCard({ group }: { group: Group }) {
                         </MorphingDialogContainer>
                     </MorphingDialog>
 
-                    <Tooltip side="top" sideOffset={10} align="center">
-                        <TooltipTrigger>
-                            <CopyIconButton
-                                text={group.name}
-                                className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
-                                copyIconClassName="size-4"
-                                checkIconClassName="size-4 text-primary"
-                            />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                                <CopyIconButton
+                                    text={group.name}
+                                    className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
+                                    copyIconClassName="size-4"
+                                    checkIconClassName="size-4 text-primary"
+                                />
+                            </span>
                         </TooltipTrigger>
-                        <TooltipContent>{t('detail.actions.copyName')}</TooltipContent>
+                        <TooltipContent side="top" sideOffset={10} align="center">
+                            {t('detail.actions.copyName')}
+                        </TooltipContent>
                     </Tooltip>
                     {!confirmDelete && (
-                        <Tooltip side="top" sideOffset={10} align="center">
-                            <TooltipTrigger>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
                                 <motion.button layoutId={`delete-btn-group-${group.id}`} type="button" onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
                                     <Trash2 className="size-4" />
                                 </motion.button>
                             </TooltipTrigger>
-                            <TooltipContent>{t('detail.actions.delete')}</TooltipContent>
+                            <TooltipContent side="top" sideOffset={10} align="center">
+                                {t('detail.actions.delete')}
+                            </TooltipContent>
                         </Tooltip>
                     )}
                 </div>
@@ -349,41 +292,18 @@ export function GroupCard({ group }: { group: Group }) {
                 </AnimatePresence>
             </header>
 
-            {/* Mode: quick switch (no need to enter Edit) */}
-            <div className="flex gap-1 mb-3">
-                {([GroupMode.RoundRobin, GroupMode.Random, GroupMode.Failover, GroupMode.Weighted] as const).map((m) => (
-                    <button
-                        key={m}
-                        type="button"
-                        aria-disabled={isUpdatingMode || !group.id}
-                        onClick={() => {
-                            if (isUpdatingMode || !group.id) return;
-                            if (m === group.mode) return;
-                            updateGroup.mutate({ id: group.id!, mode: m }, { onSuccess, onError });
-                        }}
-                        className={cn(
-                            'flex-1 py-1 text-xs rounded-lg transition-colors',
-                            group.mode === m ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80',
-                            // Keep visuals stable (no opacity/disabled flicker) while still preventing double-submit via onClick guard.
-                            (!group.id) && 'cursor-not-allowed opacity-50'
-                        )}
-                    >
-                        {t(`mode.${MODE_LABELS[m]}`)}
-                    </button>
-                ))}
-            </div>
-
             <section className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden relative h-101">
                 <MemberList
                     members={members}
-                    onReorder={setMembers}
+                    onReorder={setDraggedMembers}
                     onRemove={handleRemoveMember}
-                    onWeightChange={handleWeightChange}
+                    onActivate={handleActivate}
+                    onThinkingLevelChange={handleThinkingLevelChange}
+                    activeItemId={group.active_item_id}
                     onDragStart={handleDragStart}
                     onDrop={handleDropReorder}
                     onDragFinish={handleDragFinish}
                     autoScrollOnAdd={false}
-                    showWeight={group.mode === GroupMode.Weighted}
                     layoutScope={`card-${group.id ?? 'unknown'}`}
                 />
             </section>
