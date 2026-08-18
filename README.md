@@ -13,9 +13,10 @@
 
 ## ✨ Features
 
-- 🔀 **Multi-Channel Aggregation** - Connect multiple LLM provider channels with unified management
-- 🔄 **Protocol Conversion** - Seamless conversion between OpenAI Chat / OpenAI Responses / Anthropic API formats
-- 💰 **Price Sync** - Automatic model pricing updates
+- 🔀 **Multi-Channel Aggregation** - Connect OpenAI Chat, OpenAI Responses, Anthropic, Gemini, and Volcengine channels under one gateway
+- 🔄 **Protocol Conversion** - Seamless conversion across OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages on the public API
+- 📁 **Manual Group Routing** - Expose a group name as the client `model`, pick the active upstream item by hand, and set per-item thinking level
+- 💰 **Price Sync** - Automatic model pricing updates from models.dev, with manual overrides
 - 🔃 **Model Sync** - Automatic synchronization of available model lists with channels
 - 📊 **Analytics** - Comprehensive request statistics, token consumption, and cost tracking
 - 🎨 **Elegant UI** - Clean and beautiful web management panel
@@ -335,6 +336,8 @@ All configuration options can be overridden via environment variables using the 
 
 Channels are the basic configuration units for connecting to LLM providers.
 
+Supported channel types in code: `openai`, `openai_responses`, `anthropic`, `gemini`, `volcengine`.
+
 **Base URL Guide:**
 
 The program automatically appends API paths based on channel type. You only need to provide the base URL:
@@ -345,57 +348,85 @@ The program automatically appends API paths based on channel type. You only need
 | OpenAI Responses | `/responses` | `https://api.openai.com/v1` | `https://api.openai.com/v1/responses` |
 | Anthropic | `/messages` | `https://api.anthropic.com/v1` | `https://api.anthropic.com/v1/messages` |
 | Gemini | `/models/:model:generateContent` | `https://generativelanguage.googleapis.com/v1beta` | `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent` |
+| Volcengine | `/chat/completions` | `https://ark.cn-beijing.volces.com/api/v3` | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` |
 
-> 💡 **Tip**: No need to include specific API endpoint paths in the Base URL - the program handles this automatically.
+> 💡 **Tip**: No need to include specific API endpoint paths in the Base URL — the program handles this automatically. Volcengine uses the Doubao/Ark chat-completions wire format and normalizes the base URL with a `v3` suffix when needed.
+
+Each channel can optionally set its own proxy URL, which overrides the global proxy for that channel only.
 
 ---
 
 ### 📁 Group Management
 
-Groups aggregate multiple channels into a unified external model name.
+Groups aggregate multiple channel models into a unified external model name. Routing is **manual**, not automatic load balancing.
 
 **Core Concepts:**
 
-- **Group name** is the model name exposed by the program
-- When calling the API, set the `model` parameter to the group name
+- **Group name** is the model name exposed by the program. Clients must set the request `model` field to this name.
+- **Active item** (`active_item_id`) is the single upstream channel+model currently used for traffic. Switch it in the admin UI; `0` means no active upstream is selected.
+- **Retry interval** (`retry_interval`) is the wait in **seconds** after an upstream failure before retrying (minimum `1`, default `1`).
+- **Priority** on each group item is only the display order in the UI; it does not affect routing.
+- **Thinking level** (`thinking_level`) can be set per group item. Built-in presets: `default`, `none`, `low`, `medium`, `high`, `xhigh`. Use `default` to keep the client's own reasoning/thinking settings; other values override them for that item. Custom strings are also accepted in the UI.
 
-> 💡 **Example**: Create a group named `gpt-4o`, add multiple providers' GPT-4o channels to it, then access all channels via a unified `model: gpt-4o`.
+> 💡 **Example**: Create a group named `gpt-4o`, add several providers' GPT-4o models as items, set one item as active, then call the gateway with `model: gpt-4o`.
 
 ---
 
 ### 💰 Price Management
 
-Manage model pricing information in the system.
+The admin **Price** page manages model pricing used for cost accounting (screenshot files are still named `*-price.png`).
 
 **Data Sources:**
 
-- The system periodically syncs model pricing data from [models.dev](https://github.com/sst/models.dev)
-- When creating a channel, if the channel contains models not in models.dev, the system automatically creates pricing information for those models on this page, so this page displays models that haven't had their prices fetched from upstream, allowing users to set prices manually
+- The system periodically syncs model pricing data from [models.dev](https://github.com/sst/models.dev) (interval configurable in Settings; default 24 hours)
+- When creating a channel, if the channel contains models not in models.dev, the system automatically creates pricing rows for those models so you can set prices manually
 - Manual creation of models that exist in models.dev is also supported for custom pricing
 
 **Price Priority:**
 
 | Priority | Source | Description |
 |:--------:|--------|-------------|
-| 🥇 High | This Page | Prices set by user in price management page |
+| 🥇 High | This Page | Prices set by the user on the price management page |
 | 🥈 Low | models.dev | Auto-synced default prices |
 
-> 💡 **Tip**: To override a model's default price, simply set a custom price for it in the price management page.
+> 💡 **Tip**: To override a model's default price, set a custom price for it on the price management page.
 
 ---
 
 ### ⚙️ Settings
 
-Global system configuration.
+Global runtime settings stored in the database (not `data/config.json`):
 
-**Statistics Save Interval (minutes):**
+| Key | Meaning | Default |
+|-----|---------|---------|
+| `proxy_url` | Global upstream HTTP/HTTPS/SOCKS5 proxy | empty (direct) |
+| `stats_save_interval` | How often in-memory stats flush to the DB (**minutes**) | `10` |
+| `model_info_update_interval` | How often model price/info syncs from models.dev (**hours**) | `24` |
+| `sync_llm_interval` | How often channel model lists sync (**hours**) | `24` |
+| `cors_allow_origins` | CORS allow list (comma-separated origins). Empty denies cross-origin; `*` allows all | empty |
 
-Since the program handles numerous statistics, writing to the database on every request would impact read/write performance. The program uses this strategy:
+**Statistics flush behavior:**
 
-- Statistics are first stored in **memory**
-- Periodically **batch-written** to the database at the configured interval
+- Request stats and relay logs buffer in **memory** first
+- They are **batch-written** to the database on the stats save interval
 
-> ⚠️ **Important**: When exiting the program, use proper shutdown methods (like `Ctrl+C` or sending `SIGTERM` signal) to ensure in-memory statistics are correctly written to the database. **Do NOT use `kill -9` or other forced termination methods**, as this may result in statistics data loss.
+> ⚠️ **Important**: On shutdown, use a graceful stop (`Ctrl+C` or `SIGTERM`) so buffered stats flush. **Do not use `kill -9`**, or recent stats may be lost.
+
+Other settings modules in the admin UI cover account password, API keys, appearance, backup/restore, LLM price sync controls, LLM model sync controls, and log viewing preferences.
+
+---
+
+### 🔌 Public LLM API
+
+All public relay routes require an API key (`Authorization: Bearer <key>` or the equivalent provider header your client sends). Supported paths:
+
+| Method | Path | Typical client |
+|--------|------|----------------|
+| `POST` | `/v1/chat/completions` | OpenAI Chat Completions SDK / compatible clients |
+| `POST` | `/v1/responses` | OpenAI Responses API (e.g. Codex with `wire_api = "responses"`) |
+| `POST` | `/v1/messages` | Anthropic Messages API (e.g. Claude Code) |
+
+There are no public embeddings, images, or `/v1/models` listing routes in the current code. Set `model` to a **group name** configured in the admin panel.
 
 ---
 

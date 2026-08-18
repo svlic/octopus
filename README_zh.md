@@ -13,10 +13,11 @@
 
 ## ✨ 特性
 
-- 🔀 **多渠道聚合** - 支持接入多个 LLM 供应商渠道，统一管理
-- 🔄 **协议互转** - 支持 OpenAI Chat / OpenAI Responses / Anthropic 三种 API 格式互相转换
-- 💰 **价格同步** - 自动更新模型价格
-- 🔃 **模型同步** - 自动与渠道同步可用模型列表，省心省力
+- 🔀 **多渠道聚合** - 统一接入 OpenAI Chat、OpenAI Responses、Anthropic、Gemini、火山引擎（Volcengine）渠道
+- 🔄 **协议互转** - 对外支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages，并在上游间自动转换
+- 📁 **分组手动路由** - 以分组名作为客户端 `model`，手动指定当前上游项，并为每项设置思考强度
+- 💰 **价格同步** - 从 models.dev 自动同步模型价格，支持手动覆盖
+- 🔃 **模型同步** - 自动与渠道同步可用模型列表
 - 📊 **数据统计** - 全面的请求统计、Token 消耗、费用追踪
 - 🎨 **优雅界面** - 简洁美观的 Web 管理面板
 - 🗄️ **多数据库支持** - 支持 SQLite、MySQL、PostgreSQL
@@ -336,6 +337,8 @@ http://localhost:5173
 
 渠道是连接 LLM 供应商的基础配置单元。
 
+代码中支持的渠道类型：`openai`、`openai_responses`、`anthropic`、`gemini`、`volcengine`。
+
 **Base URL 说明：**
 
 程序会根据渠道类型自动补全 API 路径，您只需填写基础 URL 即可：
@@ -346,32 +349,38 @@ http://localhost:5173
 | OpenAI Responses | `/responses` | `https://api.openai.com/v1` | `https://api.openai.com/v1/responses` |
 | Anthropic | `/messages` | `https://api.anthropic.com/v1` | `https://api.anthropic.com/v1/messages` |
 | Gemini | `/models/:model:generateContent` | `https://generativelanguage.googleapis.com/v1beta` | `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent` |
+| 火山引擎 | `/chat/completions` | `https://ark.cn-beijing.volces.com/api/v3` | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` |
 
-> 💡 **提示**：填写 Base URL 时无需包含具体的 API 端点路径，程序会自动处理。
+> 💡 **提示**：填写 Base URL 时无需包含具体的 API 端点路径，程序会自动处理。火山引擎使用豆包/方舟 Chat Completions 协议，并在需要时将 Base URL 规范化为带 `v3` 后缀的形式。
+
+每个渠道还可单独配置代理地址；渠道代理会覆盖该渠道上的全局代理。
 
 ---
 
 ### 📁 分组管理
 
-分组用于将多个渠道聚合为一个统一的对外模型名称。
+分组用于将多个渠道模型聚合为一个统一的对外模型名称。路由为**手动切换**，不是自动负载均衡。
 
 **核心概念：**
 
-- **分组名称** 即程序对外暴露的模型名称
-- 调用 API 时，将请求中的 `model` 参数设置为分组名称即可
+- **分组名称** 即程序对外暴露的模型名称。客户端请求的 `model` 必须填该名称。
+- **当前项**（`active_item_id`）是实际承接流量的唯一上游渠道+模型。在管理面板中手动切换；`0` 表示尚未选择上游。
+- **重试间隔**（`retry_interval`）为上游失败后的等待秒数（最小 `1`，默认 `1`）。
+- **优先级**（`priority`）仅用于界面展示顺序，不影响路由。
+- **思考强度**（`thinking_level`）可按分组项单独设置。内置预设：`default`、`none`、`low`、`medium`、`high`、`xhigh`。`default` 表示保留客户端自身的推理/思考设置；其他值会覆盖该项。界面也支持自定义字符串。
 
-> 💡 **示例**：创建分组名称为 `gpt-4o`，将多个供应商的 GPT-4o 渠道加入该分组，即可通过统一的 `model: gpt-4o` 访问所有渠道。
+> 💡 **示例**：创建分组名称为 `gpt-4o`，将多个供应商的 GPT-4o 模型加入为分组项，将其中一项设为当前项，然后以 `model: gpt-4o` 调用网关即可。
 
 ---
 
 ### 💰 价格管理
 
-管理系统中的模型价格信息。
+管理面板中的 **价格** 页用于管理计费相关的模型价格（截图文件名仍为 `*-price.png`）。
 
 **数据来源：**
 
-- 系统会定期从 [models.dev](https://github.com/sst/models.dev) 同步更新模型价格数据
-- 当创建渠道时，若渠道包含的模型不在 models.dev 中，系统会自动在此页面创建该模型的价格信息,所以此页面显示的是没有从上游获取到价格的模型，用户可以手动设置价格
+- 系统会定期从 [models.dev](https://github.com/sst/models.dev) 同步模型价格数据（间隔可在设置中配置，默认 24 小时）
+- 当创建渠道时，若渠道包含的模型不在 models.dev 中，系统会自动在此页面创建价格记录，便于手动定价
 - 也支持手动创建 models.dev 中已存在的模型，用于自定义价格
 
 **价格优先级：**
@@ -387,19 +396,40 @@ http://localhost:5173
 
 ### ⚙️ 设置
 
-系统全局配置项。
+以下为存入数据库的全局运行时设置（不是 `data/config.json`）：
 
-**统计保存周期（分钟）：**
+| 键 | 含义 | 默认值 |
+|----|------|--------|
+| `proxy_url` | 全局上游 HTTP/HTTPS/SOCKS5 代理 | 空（直连） |
+| `stats_save_interval` | 内存统计写入数据库的周期（**分钟**） | `10` |
+| `model_info_update_interval` | 从 models.dev 同步模型价格/信息的周期（**小时**） | `24` |
+| `sync_llm_interval` | 同步渠道模型列表的周期（**小时**） | `24` |
+| `cors_allow_origins` | CORS 白名单（逗号分隔源站）。为空禁止跨域；`*` 允许所有 | 空 |
 
-由于程序涉及大量统计项目，若每次请求都直接写入数据库会影响读写性能。因此程序采用以下策略：
+**统计落库策略：**
 
-- 统计数据先保存在 **内存** 中
-- 按设定的周期 **定期批量写入** 数据库
+- 请求统计与转发日志先缓存在 **内存** 中
+- 按统计保存周期 **批量写入** 数据库
 
-> ⚠️ **重要提示**：退出程序时，请使用正常的关闭方式（如 `Ctrl+C` 或发送 `SIGTERM` 信号），以确保内存中的统计数据能正确写入数据库。**请勿使用 `kill -9` 等强制终止方式**，否则可能导致统计数据丢失。
+> ⚠️ **重要提示**：退出程序时请使用正常关闭方式（`Ctrl+C` 或 `SIGTERM`），以便刷出缓冲中的统计数据。**请勿使用 `kill -9`**，否则可能导致近期统计丢失。
 
+管理面板设置页还包含：账号密码、API Key、外观、备份/恢复、LLM 价格同步、LLM 模型同步、日志相关偏好等模块。
 
+---
 
+### 🔌 公开 LLM API
+
+所有公开转发路由均需 API Key（`Authorization: Bearer <key>`，或客户端对应的供应商鉴权头）。当前支持的路径：
+
+| 方法 | 路径 | 典型客户端 |
+|------|------|------------|
+| `POST` | `/v1/chat/completions` | OpenAI Chat Completions SDK / 兼容客户端 |
+| `POST` | `/v1/responses` | OpenAI Responses API（如 Codex `wire_api = "responses"`） |
+| `POST` | `/v1/messages` | Anthropic Messages API（如 Claude Code） |
+
+当前代码**没有**公开的 embeddings、images 或 `/v1/models` 列表路由。请求中的 `model` 请填写管理面板中配置的**分组名称**。
+
+---
 
 ## 🔌 客户端接入
 
