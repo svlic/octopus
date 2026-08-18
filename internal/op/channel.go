@@ -7,8 +7,8 @@ import (
 	"github.com/bestruirui/octopus/internal/db"
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/utils/cache"
-	"github.com/bestruirui/octopus/internal/utils/log"
 	"github.com/bestruirui/octopus/internal/utils/xstrings"
+	"github.com/charmbracelet/log"
 )
 
 var channelCache = cache.New[int, model.Channel](16) // channelCache 保存渠道配置的进程内副本。
@@ -147,7 +147,6 @@ func ChannelDel(id int, ctx context.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("failed to get affected groups: %w", err)
 	}
-
 	// 删除所有引用该渠道的 GroupItem
 	if err := tx.Where("channel_id = ?", id).Delete(&model.GroupItem{}).Error; err != nil {
 		tx.Rollback()

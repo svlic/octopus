@@ -13,7 +13,7 @@ import (
 	"github.com/bestruirui/octopus/internal/client"
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
-	"github.com/bestruirui/octopus/internal/utils/log"
+	"github.com/charmbracelet/log"
 )
 
 const llmPriceUrl = "https://models.dev/api.json"
@@ -30,6 +30,7 @@ var developerFamilies = map[string][]string{
 	"minimax":    {"minimax"},
 	"moonshotai": {"kimi"},
 	"v0":         {"v0"},
+	"xiaomi":     {"mimo"},
 }
 
 var lastUpdateTime time.Time // lastUpdateTime 记录最近一次成功更新时间。
@@ -41,36 +42,62 @@ func UpdateLLMPrice(ctx context.Context) error {
 	defer func() {
 		log.Debugf("update LLM price task finished, update time: %s", time.Since(startTime))
 	}()
-	client, err := client.GetHTTPClientSystemProxy(false)
-	if err != nil {
-		return err
+	var body []byte
+	httpClient, err := client.GetHTTPClientSystemProxy(false)
+	if err == nil {
+		req, requestErr := http.NewRequestWithContext(ctx, http.MethodGet, llmPriceUrl, nil)
+		if requestErr != nil {
+			return requestErr
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+		resp, requestErr := httpClient.Do(req)
+		if requestErr != nil {
+			err = requestErr
+		} else {
+			if resp.StatusCode != http.StatusOK {
+				err = fmt.Errorf("failed to fetch LLM info: %s", resp.Status)
+			} else {
+				body, err = io.ReadAll(resp.Body)
+				if err != nil {
+					err = fmt.Errorf("failed to read response body: %w", err)
+				}
+			}
+			resp.Body.Close()
+		}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, llmPriceUrl, nil)
 	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch LLM info: %s", resp.Status)
+		log.Warnf("direct request failed, trying with proxy: %v", err)
+		httpClient, err = client.GetHTTPClientSystemProxy(true)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, llmPriceUrl, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to fetch LLM info: %s", resp.Status)
+		}
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 	}
 	var rawPrice map[string]struct {
 		Models map[string]struct {
-			ID         string `json:"id"`     // ID 是模型标识。
-			Family     string `json:"family"` // Family 是模型所属系列。
+			ID         string `json:"id"`     // 模型标识。
+			Family     string `json:"family"` // 模型所属系列。
 			Modalities struct {
-				Output []string `json:"output"` // Output 是模型支持的输出类型。
+				Output []string `json:"output"` // 模型支持的输出类型。
 			} `json:"modalities"`
-			Cost model.LLMPrice `json:"cost"` // Cost 是模型价格。
+			Cost model.LLMPrice `json:"cost"` // 模型价格。
 		} `json:"models"`
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
 	}
 	if err := json.Unmarshal(body, &rawPrice); err != nil {
 		return fmt.Errorf("failed to parse LLM info: %w", err)
