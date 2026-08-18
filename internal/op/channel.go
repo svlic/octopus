@@ -173,11 +173,14 @@ func ChannelDel(id int, ctx context.Context) error {
 	channelCache.Del(id)
 	StatsChannelDel(id)
 
-	// 刷新受影响的分组缓存
+	// 刷新受影响的分组缓存，并清掉指向已删 GroupItem 的 ActiveItemID
 	for _, groupID := range affectedGroupIDs {
 		if err := groupRefreshCacheByID(groupID, ctx); err != nil {
 			log.Warnf("failed to refresh group cache for group %d: %v", groupID, err)
 		}
+	}
+	if err := clearStaleActiveItemIDs(affectedGroupIDs, ctx); err != nil {
+		log.Warnf("failed to clear stale active items after channel delete: %v", err)
 	}
 
 	return nil

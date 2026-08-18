@@ -166,6 +166,9 @@ func GroupUpdate(req *model.GroupUpdateRequest, ctx context.Context) (*model.Gro
 	if oldName != "" && oldName != group.Name {
 		groupMap.Del(oldName)
 	}
+	if oldGroup.ActiveItemID != 0 && group.ActiveItemID == 0 {
+		notifyGroupActiveItemChanged()
+	}
 	return &group, nil
 }
 
@@ -335,7 +338,10 @@ func GroupItemDel(id int, ctx context.Context) error {
 		return err
 	}
 
-	return groupRefreshCacheByID(item.GroupID, ctx)
+	if err := groupRefreshCacheByID(item.GroupID, ctx); err != nil {
+		return err
+	}
+	return clearStaleActiveItemIDs([]int{item.GroupID}, ctx)
 }
 
 // GroupItemBatchDelByChannelAndModels 根据渠道ID和模型名称批量删除分组项
@@ -371,7 +377,47 @@ func GroupItemBatchDelByChannelAndModels(keys []model.GroupIDAndLLMName, ctx con
 	if err := groupRefreshCacheByIDs(groupIDs, ctx); err != nil {
 		return fmt.Errorf("failed to refresh group cache: %w", err)
 	}
+	if err := clearStaleActiveItemIDs(groupIDs, ctx); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+// clearStaleActiveItemIDs 在分组项删除后，将仍指向已删除项的 active_item_id 清零并通知等待方。
+func clearStaleActiveItemIDs(groupIDs []int, ctx context.Context) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+	changed := false
+	for _, groupID := range groupIDs {
+		group, ok := groupCache.Get(groupID)
+		if !ok || group.ActiveItemID == 0 {
+			continue
+		}
+		found := false
+		for _, item := range group.Items {
+			if item.ID == group.ActiveItemID {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		if err := db.GetDB().WithContext(ctx).Model(&model.Group{}).
+			Where("id = ?", groupID).
+			Update("active_item_id", 0).Error; err != nil {
+			return fmt.Errorf("failed to clear active item for group %d: %w", groupID, err)
+		}
+		group.ActiveItemID = 0
+		groupCache.Set(groupID, group)
+		groupMap.Set(group.Name, group)
+		changed = true
+	}
+	if changed {
+		notifyGroupActiveItemChanged()
+	}
 	return nil
 }
 
