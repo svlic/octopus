@@ -38,15 +38,7 @@ func Listen() {
 			ilog.Errorf("Closing functions execution failed: %v", err)
 		}
 	}
-	ilog.Infof("Shutdown completed successfully")
-	os.Exit(0)
-}
-
-func Shutdown() {
-	for i := len(funcs) - 1; i >= 0; i-- {
-		if err := funcs[i](); err != nil {
-			ilog.Errorf("Closing functions execution failed: %v", err)
-		}
+		ilog.Infof("Shutdown completed successfully")
+		os.Exit(0)
 	}
-	ilog.Infof("Shutdown completed successfully")
-}
+

@@ -11,10 +11,7 @@ import (
 )
 
 const (
-	TaskPriceUpdate  = "price_update"
-	TaskStatsSave    = "stats_save"
-	TaskSyncLLM      = "sync_llm"
-	TaskCleanLLM     = "clean_llm"
+	TaskStatsSave = "stats_save"
 )
 
 func Init() {
