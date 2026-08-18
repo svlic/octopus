@@ -30,14 +30,14 @@ import { CopyIconButton } from '@/components/common/CopyButton';
 function toExpireAt(date: Date, time: string): number {
     const t = /^\d{2}:\d{2}$/.test(time) ? time : '00:00';
     const [hh, mm] = t.split(':').map(Number);
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, 0));
-    // 返回 Unix 时间戳（秒）
+    // 按用户本地日历日+时间构造，再存为 Unix 秒，与 parseExpireDate / 展示一致
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, 0);
     return Math.floor(d.getTime() / 1000);
 }
 
 function parseExpireDate(expireAt?: number): Date | undefined {
     if (!expireAt) return undefined;
-    // 从 Unix 时间戳（秒）转换为 Date
+    // 从 Unix 时间戳（秒）转换为本地 Date
     const d = new Date(expireAt * 1000);
     return isNaN(d.getTime()) ? undefined : d;
 }
@@ -94,7 +94,7 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
         if (apiKey?.expire_at) {
             const d = new Date(apiKey.expire_at * 1000);
             if (!isNaN(d.getTime())) {
-                return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`;
+                return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
             }
         }
         return '00:00';
