@@ -105,10 +105,6 @@ func RegisterAll(engine *gin.Engine) error {
 
 // registerRoute registers a single route to a Gin route group.
 func registerRoute(group *gin.RouterGroup, method string, path string, handlers []gin.HandlerFunc) {
-	if len(handlers) == 0 {
-		return
-	}
-
 	if path != "" {
 		if !strings.HasPrefix(path, "/") {
 			path = "/" + path
