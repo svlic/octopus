@@ -143,8 +143,6 @@ cd web
 pnpm install --frozen-lockfile
 pnpm run build
 cd ..
-rm -rf static/out
-mv web/out static/out
 
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
@@ -184,11 +182,11 @@ go run main.go start
 **Development Mode**
 
 ```bash
-cd web && pnpm install && NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8080" pnpm run dev
+cd web && pnpm install && VITE_PROXY_TARGET="http://127.0.0.1:8080" pnpm run dev
 ## Open a new terminal, start the backend service
 go run main.go start
 ## Access the frontend at
-http://localhost:3000
+http://localhost:5173
 ```
 
 ### 🔐 Default Credentials
