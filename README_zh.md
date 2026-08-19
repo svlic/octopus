@@ -103,6 +103,15 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
 
 可以通过 `uname -m` 查看服务器架构：`x86_64` 对应 `linux/amd64`，`aarch64` 或 `arm64` 对应 `linux/arm64`。
 
+生成运行镜像所需的第三方许可证报告：
+
+```bash
+TOOLCHAIN_ROOT="$(go env GOROOT)"
+GOROOT="$TOOLCHAIN_ROOT" PATH="$TOOLCHAIN_ROOT/bin:$PATH" \
+  GOFLAGS="-tags=jsoniter" go run github.com/google/go-licenses/v2@v2.0.1 report . \
+  --ignore "github.com/bestruirui/octopus" > build/THIRD_PARTY_LICENSES.csv
+```
+
 4. 在项目根目录新建或替换 `docker-compose.yml`。以下示例适用于 Linux AMD64；ARM64 服务器将 `linux/amd64` 改为 `linux/arm64`：
 
 ```yaml
@@ -110,7 +119,7 @@ services:
   octopus:
     build:
       context: .
-      dockerfile: scripts/dockerfiles/Dockerfile.debian
+      dockerfile: scripts/dockerfile/Dockerfile
       args:
         TARGETPLATFORM: linux/amd64
     image: octopus:dyna
@@ -147,6 +156,11 @@ cd ..
 
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
+
+TOOLCHAIN_ROOT="$(go env GOROOT)"
+GOROOT="$TOOLCHAIN_ROOT" PATH="$TOOLCHAIN_ROOT/bin:$PATH" \
+  GOFLAGS="-tags=jsoniter" go run github.com/google/go-licenses/v2@v2.0.1 report . \
+  --ignore "github.com/bestruirui/octopus" > build/THIRD_PARTY_LICENSES.csv
 
 docker compose up -d --build
 ```

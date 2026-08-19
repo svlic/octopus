@@ -103,6 +103,15 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
 
 Run `uname -m` to identify the server architecture: `x86_64` maps to `linux/amd64`; `aarch64` or `arm64` maps to `linux/arm64`.
 
+Generate the third-party license report required by the runtime image:
+
+```bash
+TOOLCHAIN_ROOT="$(go env GOROOT)"
+GOROOT="$TOOLCHAIN_ROOT" PATH="$TOOLCHAIN_ROOT/bin:$PATH" \
+  GOFLAGS="-tags=jsoniter" go run github.com/google/go-licenses/v2@v2.0.1 report . \
+  --ignore "github.com/bestruirui/octopus" > build/THIRD_PARTY_LICENSES.csv
+```
+
 4. Create or replace `docker-compose.yml` in the project root. This example targets Linux AMD64; on ARM64, replace `linux/amd64` with `linux/arm64`:
 
 ```yaml
@@ -110,7 +119,7 @@ services:
   octopus:
     build:
       context: .
-      dockerfile: scripts/dockerfiles/Dockerfile.debian
+      dockerfile: scripts/dockerfile/Dockerfile
       args:
         TARGETPLATFORM: linux/amd64
     image: octopus:dyna
@@ -147,6 +156,11 @@ cd ..
 
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -tags=jsoniter -o build/docker/linux/amd64/octopus .
+
+TOOLCHAIN_ROOT="$(go env GOROOT)"
+GOROOT="$TOOLCHAIN_ROOT" PATH="$TOOLCHAIN_ROOT/bin:$PATH" \
+  GOFLAGS="-tags=jsoniter" go run github.com/google/go-licenses/v2@v2.0.1 report . \
+  --ignore "github.com/bestruirui/octopus" > build/THIRD_PARTY_LICENSES.csv
 
 docker compose up -d --build
 ```
