@@ -55,7 +55,7 @@ There is **no** Makefile, golangci-lint config, or pre-commit hook. CI (`.github
 | `internal/conf/` | Viper config, banner, version ldflags, `IsDebug` |
 | `web/` | Vite React admin UI under `web/src` |
 | `static/` | Embed root only — do not hand-edit generated `out/` |
-| `scripts/build.sh`, `scripts/dockerfiles/` | Release + Docker images |
+| `scripts/build.sh`, `scripts/dockerfile/` | Release + Docker images |
 
 ### Request paths
 
