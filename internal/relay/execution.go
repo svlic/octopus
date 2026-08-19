@@ -229,7 +229,7 @@ func (e *execution) handleAttemptFailure(ctx context.Context, item model.GroupIt
 	if !errors.Is(result.err, errUnsupportedTarget) {
 		metrics := usageMetrics(item.ModelName, result.usage)
 		e.requestMetrics.Add(metrics)
-		applyAttemptMetric(e.request.model, channel, metrics, duration, false)
+		applyAttemptMetric(item, channel, metrics, duration, false)
 	}
 	e.log.Error = attempt.Error
 	e.emit(LogEventAttemptFinished, attempt)
@@ -253,7 +253,7 @@ func (e *execution) commitAttempt(ctx, attemptCtx context.Context, item model.Gr
 	}
 	metrics := usageMetrics(item.ModelName, usage)
 	e.requestMetrics.Add(metrics)
-	applyAttemptMetric(e.request.model, channel, metrics, metricDuration, commit.err == nil || errors.Is(commit.err, errClientWrite) || errors.Is(commit.err, context.Canceled))
+	applyAttemptMetric(item, channel, metrics, metricDuration, commit.err == nil || errors.Is(commit.err, errClientWrite) || errors.Is(commit.err, context.Canceled))
 	if commit.err == nil {
 		e.finish(RequestStateSuccess, nil, commit.responseBody, usage)
 	} else if errors.Is(commit.err, context.Canceled) || ctx.Err() != nil {

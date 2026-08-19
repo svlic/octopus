@@ -34,7 +34,7 @@ func usageMetrics(modelName string, usage *llm.Usage) model.StatsMetrics {
 }
 
 // applyAttemptMetric 在一次真实上游调用结束时更新渠道和模型统计。
-func applyAttemptMetric(modelName string, channel *model.Channel, metrics model.StatsMetrics, duration time.Duration, healthy bool) {
+func applyAttemptMetric(item model.GroupItem, channel *model.Channel, metrics model.StatsMetrics, duration time.Duration, healthy bool) {
 	metrics.WaitTime = duration.Milliseconds()
 	if healthy {
 		metrics.RequestSuccess = 1
@@ -44,8 +44,8 @@ func applyAttemptMetric(modelName string, channel *model.Channel, metrics model.
 	if err := op.StatsChannelUpdate(channel.ID, metrics); err != nil {
 		log.Warnf("failed to update channel %d stats: %v", channel.ID, err)
 	}
-	if err := op.StatsModelUpdate(model.StatsModel{Name: modelName, StatsMetrics: metrics}); err != nil {
-		log.Warnf("failed to update model %s stats: %v", modelName, err)
+	if err := op.StatsModelUpdate(model.StatsModel{Name: item.ModelName, StatsMetrics: metrics}); err != nil {
+		log.Warnf("failed to update model %s stats: %v", item.ModelName, err)
 	}
 }
 
